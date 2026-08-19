@@ -4,16 +4,52 @@ const dotenv = require('dotenv');
 const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+const crypto = require('crypto');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Render terminates TLS at a single proxy; without this req.ip is the proxy's
+// address, which would put every visitor in one rate-limit bucket.
+app.set('trust proxy', 1);
+
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(helmet({
+  // the frontend is one self-contained page with inline <style>/<script>
+  contentSecurityPolicy: false,
+}));
+
+// Same-origin by default - this app serves the frontend itself. Set
+// ALLOWED_ORIGIN (comma-separated) only if another origin must call the API.
+const allowedOrigin = process.env.ALLOWED_ORIGIN
+  ? process.env.ALLOWED_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
+  : false;
+app.use(cors({ origin: allowedOrigin, methods: ['GET', 'POST'] }));
+
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: true, limit: '100kb' }));
+
+// Public write endpoints are unauthenticated, so cap how often they can be hit.
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests. Please try again later.' },
+});
+
+// Tracking fires on every page view, so it gets a much higher ceiling.
+const trackingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests.' },
+});
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -33,6 +69,63 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// The anon key is public (it ships in the frontend), so with RLS enabled it can
+// only insert. Reading lead data needs the service-role key, which bypasses RLS
+// and must never reach the browser. It is optional: without it the admin
+// endpoints refuse outright rather than silently falling back to the anon key.
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAdmin = serviceRoleKey
+  ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+  : null;
+
+if (!serviceRoleKey) {
+  console.warn('WARNING: SUPABASE_SERVICE_ROLE_KEY not set - admin endpoints disabled.');
+}
+if (!process.env.ADMIN_API_KEY) {
+  console.warn('WARNING: ADMIN_API_KEY not set - admin endpoints disabled.');
+}
+
+function safeEqual(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+// Fails closed: anything unconfigured means no admin access at all.
+function requireAdmin(req, res, next) {
+  const configured = process.env.ADMIN_API_KEY;
+  if (!configured || !supabaseAdmin) {
+    return res.status(503).json({
+      success: false,
+      message: 'Admin endpoints are disabled. Set ADMIN_API_KEY and SUPABASE_SERVICE_ROLE_KEY.',
+    });
+  }
+
+  const header = req.get('authorization') || '';
+  const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!presented || !safeEqual(presented, configured)) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  return next();
+}
+
+// User input is interpolated into notification emails; escape it so a lead
+// cannot inject markup, and keep header fields on a single line.
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function singleLine(value) {
+  return String(value == null ? '' : value).replace(/[\r\n]+/g, ' ').trim();
+}
 
 // ============================================
 // Email configuration (Nodemailer)
@@ -68,7 +161,7 @@ app.get('/api/health', (req, res) => {
 // ============================================
 // 1. DEMO REQUEST ENDPOINT
 // ============================================
-app.post('/api/demo-request', async (req, res) => {
+app.post('/api/demo-request', writeLimiter, async (req, res) => {
   try {
     const { name, email, phone, company, message, requestedDate } = req.body;
 
@@ -100,10 +193,10 @@ app.post('/api/demo-request', async (req, res) => {
     };
 
     // Save to Supabase
-    const { data, error } = await supabase
+    // No .select(): RETURNING needs a SELECT policy, and anon is insert-only.
+    const { error } = await supabase
       .from('demo_requests')
-      .insert([demoRequest])
-      .select();
+      .insert([demoRequest]);
 
     if (error) {
       console.error('Supabase insert error:', error);
@@ -114,22 +207,22 @@ app.post('/api/demo-request', async (req, res) => {
       });
     }
 
-    console.log('Demo request saved:', data);
+    console.log('Demo request saved for:', email);
 
     // Send email notification to team
     if (process.env.EMAIL_USER) {
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: process.env.TEAM_EMAIL || process.env.EMAIL_USER,
-        subject: `New Demo Request: ${name}`,
+        subject: singleLine(`New Demo Request: ${name}`),
         html: `
           <h2>New Demo Request</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone}</p>
-          <p><strong>Company:</strong> ${company || 'Not provided'}</p>
-          <p><strong>Message:</strong> ${message || 'No message'}</p>
-          <p><strong>Requested Date:</strong> ${requestedDate || 'Not specified'}</p>
+          <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+          <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+          <p><strong>Phone:</strong> ${escapeHtml(phone)}</p>
+          <p><strong>Company:</strong> ${escapeHtml(company || 'Not provided')}</p>
+          <p><strong>Message:</strong> ${escapeHtml(message || 'No message')}</p>
+          <p><strong>Requested Date:</strong> ${escapeHtml(requestedDate || 'Not specified')}</p>
           <hr>
           <p><small>Status: Pending | Received: ${new Date().toISOString()}</small></p>
         `,
@@ -147,7 +240,7 @@ app.post('/api/demo-request', async (req, res) => {
     res.json({
       success: true,
       message: 'Demo request received. We will contact you soon!',
-      demoRequest: data[0],
+      demoRequest,
     });
   } catch (error) {
     console.error('Error processing demo request:', error);
@@ -162,7 +255,7 @@ app.post('/api/demo-request', async (req, res) => {
 // ============================================
 // 2. VISITOR TRACKING ENDPOINT
 // ============================================
-app.post('/api/track-visitor', async (req, res) => {
+app.post('/api/track-visitor', trackingLimiter, async (req, res) => {
   try {
     const { page, referrer, userAgent, timestamp } = req.body;
 
@@ -175,17 +268,16 @@ app.post('/api/track-visitor', async (req, res) => {
     };
 
     // Save to Supabase
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('visitors')
-      .insert([visitorRecord])
-      .select();
+      .insert([visitorRecord]);
 
     if (error) {
       console.error('Supabase visitor insert error:', error);
       // Don't fail the response for tracking - it's not critical
     }
 
-    console.log('Visitor tracked:', visitorRecord);
+    console.log('Visitor tracked:', visitorRecord.page);
 
     res.json({
       success: true,
@@ -204,10 +296,10 @@ app.post('/api/track-visitor', async (req, res) => {
 // ============================================
 // 3. GET VISITOR ANALYTICS
 // ============================================
-app.get('/api/analytics/visitors', async (req, res) => {
+app.get('/api/analytics/visitors', requireAdmin, async (req, res) => {
   try {
     // Get total visitors count
-    const { count, error: countError } = await supabase
+    const { count, error: countError } = await supabaseAdmin
       .from('visitors')
       .select('*', { count: 'exact', head: true });
 
@@ -216,7 +308,7 @@ app.get('/api/analytics/visitors', async (req, res) => {
     }
 
     // Get recent visitors (last 100)
-    const { data: recentVisitors, error: dataError } = await supabase
+    const { data: recentVisitors, error: dataError } = await supabaseAdmin
       .from('visitors')
       .select('*')
       .order('timestamp', { ascending: false })
@@ -226,14 +318,8 @@ app.get('/api/analytics/visitors', async (req, res) => {
       throw dataError;
     }
 
-    // Get top pages
-    const { data: pageData, error: pageError } = await supabase
-      .from('visitors')
-      .select('page, count(*)')
-      .group_by('page')
-      .order('count', { ascending: false })
-      .limit(10);
-
+    // Top pages are derived from recentVisitors below. The Supabase client has
+    // no .group_by(), so the previous call here threw on every request.
     // Calculate page views per page
     let topPages = [];
     if (recentVisitors) {
@@ -267,9 +353,9 @@ app.get('/api/analytics/visitors', async (req, res) => {
 // ============================================
 // 4. GET ALL DEMO REQUESTS (for admin)
 // ============================================
-app.get('/api/demo-requests', async (req, res) => {
+app.get('/api/demo-requests', requireAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('demo_requests')
       .select('*')
       .order('created_at', { ascending: false });
@@ -295,7 +381,7 @@ app.get('/api/demo-requests', async (req, res) => {
 // ============================================
 // 5. CONTACT FORM ENDPOINT
 // ============================================
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', writeLimiter, async (req, res) => {
   try {
     const { name, email, subject, message } = req.body;
 
@@ -314,10 +400,9 @@ app.post('/api/contact', async (req, res) => {
     };
 
     // Save to Supabase
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
-      .insert([contactMessage])
-      .select();
+      .insert([contactMessage]);
 
     if (error) {
       console.error('Supabase contact insert error:', error);
@@ -328,20 +413,20 @@ app.post('/api/contact', async (req, res) => {
       });
     }
 
-    console.log('Contact message saved:', data);
+    console.log('Contact message saved from:', email);
 
     // Send confirmation email
     if (process.env.EMAIL_USER) {
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: process.env.TEAM_EMAIL || process.env.EMAIL_USER,
-        subject: `New Contact: ${subject || 'General Inquiry'}`,
+        subject: singleLine(`New Contact: ${subject || 'General Inquiry'}`),
         html: `
           <h2>New Contact Message</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Subject:</strong> ${subject || 'General Inquiry'}</p>
-          <p><strong>Message:</strong> ${message}</p>
+          <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+          <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+          <p><strong>Subject:</strong> ${escapeHtml(subject || 'General Inquiry')}</p>
+          <p><strong>Message:</strong> ${escapeHtml(message)}</p>
           <hr>
           <p><small>Received: ${new Date().toISOString()}</small></p>
         `,
@@ -359,7 +444,7 @@ app.post('/api/contact', async (req, res) => {
     res.json({
       success: true,
       message: 'Message received. Thank you for contacting us!',
-      contactMessage: data[0],
+      contactMessage,
     });
   } catch (error) {
     console.error('Error processing contact:', error);
