@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>HealthOS Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --porcelain:#FAFAF8;
+    --surface:#FFFFFF;
+    --surface-2:#F2F0E8;
+    --ink:#0B1220;
+    --mist:#55607A;
+    --faint:#8A93A3;
+    --line:#E4E1D8;
+    --line-2:#CFCABC;
+    --pulse:#0A8E75;
+    --pulse-soft:#0FA98C1F;
+
+    /* semantic, deliberately separate from the brand accent */
+    --new:#B26A00;      --new-soft:#B26A001A;
+    --active:#2557B0;   --active-soft:#2557B01A;
+    --done:#5C6672;     --done-soft:#5C66721A;
+    --danger:#B93D28;
+
+    --serif:'Fraunces',Georgia,serif;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--porcelain);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px;}
+
+  /* ---------- gate ---------- */
+  #gate{min-height:100vh;display:grid;place-items:center;padding:24px;}
+  .gate-card{width:100%;max-width:380px;}
+  .gate-card h1{font-family:var(--serif);font-size:30px;margin:0 0 8px;font-weight:600;letter-spacing:-.01em;}
+  .gate-card p{color:var(--mist);margin:0 0 24px;font-size:14.5px;}
+  label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+        text-transform:uppercase;color:var(--faint);margin-bottom:8px;}
+  input[type=password],input[type=text]{
+    width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;
+    font-family:var(--mono);font-size:15px;background:var(--surface);color:var(--ink);
+  }
+  input:focus-visible,button:focus-visible,select:focus-visible{
+    outline:2px solid var(--pulse);outline-offset:2px;
+  }
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:11px 18px;border-radius:8px;border:1px solid var(--ink);
+    background:var(--ink);color:var(--porcelain);font-family:var(--sans);
+    font-size:14.5px;font-weight:500;cursor:pointer;
+  }
+  .btn.ghost{background:transparent;color:var(--ink);border-color:var(--line-2);}
+  .btn.sm{padding:6px 12px;font-size:13px;border-radius:6px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  #gateBtn{width:100%;margin-top:18px;}
+  .err{color:var(--danger);font-family:var(--mono);font-size:13px;margin-top:14px;min-height:19px;}
+
+  /* ---------- shell ---------- */
+  #app{display:none;}
+  header.bar{
+    border-bottom:1px solid var(--line);background:var(--surface);
+    position:sticky;top:0;z-index:10;
+  }
+  .bar-in{display:flex;align-items:center;gap:16px;padding:16px 0;}
+  .brand{font-family:var(--serif);font-size:19px;font-weight:600;display:flex;align-items:center;gap:9px;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--pulse);}
+  .spacer{flex:1;}
+  .meta{font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+
+  /* ---------- tiles ---------- */
+  /* separate cards, so an odd tile count never leaves a dead filler block */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+         gap:12px;margin:28px 0 0;}
+  .tile{background:var(--surface);border:1px solid var(--line);padding:18px 20px;}
+  .tile .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--faint);margin-bottom:10px;display:flex;align-items:center;gap:7px;}
+  .tile .v{font-family:var(--serif);font-size:34px;line-height:1;font-variant-numeric:tabular-nums;}
+  .tile .v.zero{color:var(--faint);}
+  .livedot{width:8px;height:8px;border-radius:50%;background:var(--done);}
+  .livedot.on{background:var(--pulse);animation:blip 2s ease-in-out infinite;}
+  @keyframes blip{0%,100%{opacity:1;}50%{opacity:.35;}}
+  @media (prefers-reduced-motion:reduce){.livedot.on{animation:none;}}
+
+  /* ---------- sections ---------- */
+  section{margin-top:44px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;
+            padding-bottom:12px;border-bottom:1px solid var(--line-2);}
+  h2{font-family:var(--serif);font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em;}
+  .count{font-family:var(--mono);font-size:12px;color:var(--faint);}
+
+  .scroll{overflow-x:auto;border:1px solid var(--line);background:var(--surface);}
+  table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px;}
+  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+     color:var(--faint);font-weight:400;background:var(--surface-2);white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  td.when{font-family:var(--mono);font-size:12.5px;color:var(--faint);white-space:nowrap;}
+  td.nowrap{white-space:nowrap;}
+  td.who strong{display:block;font-weight:600;}
+  td.who span{color:var(--mist);font-size:13px;}
+  td.msg{color:var(--mist);max-width:340px;}
+  .empty{padding:30px 16px;text-align:center;color:var(--faint);font-size:14px;background:var(--surface);
+         border:1px solid var(--line);}
+
+  .pill{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;
+        text-transform:uppercase;padding:3px 8px;border-radius:3px;white-space:nowrap;}
+  .pill.pending,.pill.open{color:var(--new);background:var(--new-soft);}
+  .pill.contacted,.pill.scheduled{color:var(--active);background:var(--active-soft);}
+  .pill.closed,.pill.handled{color:var(--done);background:var(--done-soft);}
+
+  select{
+    font-family:var(--sans);font-size:13px;padding:5px 8px;border-radius:6px;
+    border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;
+  }
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px;}
+  @media(max-width:860px){.cols{grid-template-columns:1fr;}}
+  .panel{border:1px solid var(--line);background:var(--surface);}
+  .panel h3{margin:0;padding:13px 16px;border-bottom:1px solid var(--line);
+            font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;
+            text-transform:uppercase;color:var(--faint);font-weight:400;background:var(--surface-2);}
+  .rowline{display:flex;justify-content:space-between;gap:14px;padding:10px 16px;
+           border-bottom:1px solid var(--line);font-size:14px;}
+  .rowline:last-child{border-bottom:none;}
+  .rowline .p{font-family:var(--mono);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rowline .n{font-variant-numeric:tabular-nums;color:var(--mist);}
+
+  footer{margin:56px 0 40px;color:var(--faint);font-size:12.5px;font-family:var(--mono);}
+  @media(max-width:620px){.wrap{padding:0 16px;}.bar-in{flex-wrap:wrap;}}
+</style>
+</head>
+<body>
+
+<!-- ---------------- key gate ---------------- -->
+<div id="gate">
+  <div class="gate-card">
+    <h1>HealthOS Admin</h1>
+    <p>Enter the admin key to view live visitors, leads and queries.</p>
+    <label for="key">Admin key</label>
+    <input type="password" id="key" autocomplete="current-password" spellcheck="false">
+    <button class="btn" id="gateBtn">Unlock</button>
+    <div class="err" id="gateErr"></div>
+  </div>
+</div>
+
+<!-- ---------------- dashboard ---------------- -->
+<div id="app">
+  <header class="bar">
+    <div class="wrap bar-in">
+      <div class="brand"><span class="dot"></span>HealthOS Admin</div>
+      <div class="spacer"></div>
+      <div class="meta" id="updated">—</div>
+      <button class="btn ghost sm" id="refresh">Refresh</button>
+      <button class="btn ghost sm" id="signout">Sign out</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="tiles">
+      <div class="tile">
+        <div class="k"><span class="livedot" id="livedot"></span>Live now</div>
+        <div class="v" id="tLive">—</div>
+      </div>
+      <div class="tile"><div class="k">Visitors today</div><div class="v" id="tToday">—</div></div>
+      <div class="tile"><div class="k">Total visits</div><div class="v" id="tTotal">—</div></div>
+      <div class="tile"><div class="k">Open leads</div><div class="v" id="tLeads">—</div></div>
+      <div class="tile"><div class="k">Open queries</div><div class="v" id="tQueries">—</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><h2>Demo requests</h2><span class="count" id="cLeads"></span></div>
+      <div id="leadsWrap"></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Contact queries</h2><span class="count" id="cQueries"></span></div>
+      <div id="queriesWrap"></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Visitors</h2><span class="count" id="cVisits"></span></div>
+      <div class="cols">
+        <div class="panel"><h3>Top pages</h3><div id="topPages"></div></div>
+        <div class="panel"><h3>Recent activity</h3><div id="recent"></div></div>
+      </div>
+    </section>
+
+    <footer>Auto-refreshes every 15 seconds · data from Supabase via the admin API</footer>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var KEY_NAME = 'healthos_admin_key';
+  var REFRESH_MS = 15000;
+  var timer = null;
+
+  var $ = function (id) { return document.getElementById(id); };
+  function key() { return sessionStorage.getItem(KEY_NAME) || ''; }
+
+  function api(path, options) {
+    options = options || {};
+    var headers = { Authorization: 'Bearer ' + key() };
+    if (options.body) headers['Content-Type'] = 'application/json';
+    return fetch(path, {
+      method: options.method || 'GET',
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  }
+
+  // Everything below renders lead-submitted text. Build nodes and use
+  // textContent so a hostile submission can never inject markup here.
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+
+  function when(value) {
+    if (!value) return '—';
+    var d = new Date(value.indexOf('Z') === -1 ? value + 'Z' : value);
+    if (isNaN(d)) return String(value);
+    var diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) +
+           ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function dateOnly(value) {
+    if (!value) return '—';
+    var d = new Date(String(value).replace(' ', 'T'));
+    return isNaN(d) ? String(value)
+      : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function statusSelect(current, options, onChange) {
+    var sel = document.createElement('select');
+    options.forEach(function (o) {
+      var opt = el('option', null, o.charAt(0).toUpperCase() + o.slice(1));
+      opt.value = o;
+      if (o === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', function () {
+      sel.disabled = true;
+      onChange(sel.value, function done(ok) {
+        sel.disabled = false;
+        if (!ok) sel.value = current;
+      });
+    });
+    return sel;
+  }
+
+  function table(headings, rows) {
+    if (!rows.length) return el('div', 'empty', 'Nothing here yet.');
+    var scroll = el('div', 'scroll');
+    var t = el('table');
+    var thead = el('thead');
+    var htr = el('tr');
+    headings.forEach(function (h) { htr.appendChild(el('th', null, h)); });
+    thead.appendChild(htr);
+    t.appendChild(thead);
+    var tb = el('tbody');
+    rows.forEach(function (r) { tb.appendChild(r); });
+    t.appendChild(tb);
+    scroll.appendChild(t);
+    return scroll;
+  }
+
+  function setTile(id, value) {
+    var n = $(id);
+    n.textContent = value;
+    n.classList.toggle('zero', value === 0);
+  }
+
+  // ---------------- loaders ----------------
+
+  function loadSummary() {
+    return api('/api/admin/summary').then(function (r) {
+      if (!r.ok) throw r;
+      return r.json();
+    }).then(function (d) {
+      setTile('tLive', d.liveVisitors);
+      setTile('tToday', d.visitorsToday);
+      setTile('tTotal', d.totalVisits);
+      setTile('tLeads', d.openLeads);
+      setTile('tQueries', d.openQueries);
+      $('livedot').classList.toggle('on', d.liveVisitors > 0);
+    });
+  }
+
+  function loadLeads() {
+    return api('/api/demo-requests').then(function (r) {
+      if (!r.ok) throw r;
+      return r.json();
+    }).then(function (d) {
+      var list = d.demoRequests || [];
+      $('cLeads').textContent = list.length + (list.length === 1 ? ' request' : ' requests');
+
+      var rows = list.map(function (item) {
+        var tr = el('tr');
+
+        var who = el('td', 'who');
+        who.appendChild(el('strong', null, item.name));
+        who.appendChild(el('span', null, item.email));
+        tr.appendChild(who);
+
+        tr.appendChild(el('td', 'nowrap', item.phone || '—'));
+        tr.appendChild(el('td', null, item.company || '—'));
+        tr.appendChild(el('td', null, dateOnly(item.requested_date)));
+        tr.appendChild(el('td', 'msg', item.message || '—'));
+        tr.appendChild(el('td', 'when', when(item.created_at)));
+
+        var st = el('td');
+        st.appendChild(statusSelect(item.status, ['pending', 'contacted', 'scheduled', 'closed'],
+          function (value, done) {
+            api('/api/admin/demo-requests/' + item.id, { method: 'PATCH', body: { status: value } })
+              .then(function (r) { done(r.ok); if (r.ok) { item.status = value; loadSummary(); } })
+              .catch(function () { done(false); });
+          }));
+        tr.appendChild(st);
+
+        return tr;
+      });
+
+      var wrap = $('leadsWrap');
+      wrap.textContent = '';
+      wrap.appendChild(table(
+        ['Contact', 'Phone', 'Hospital', 'Preferred date', 'Message', 'Received', 'Status'], rows));
+    });
+  }
+
+  function loadQueries() {
+    return api('/api/admin/contacts').then(function (r) {
+      if (!r.ok) throw r;
+      return r.json();
+    }).then(function (d) {
+      var list = d.contacts || [];
+      $('cQueries').textContent = list.length + (list.length === 1 ? ' message' : ' messages');
+
+      var rows = list.map(function (item) {
+        var tr = el('tr');
+
+        var who = el('td', 'who');
+        who.appendChild(el('strong', null, item.name));
+        who.appendChild(el('span', null, item.email));
+        tr.appendChild(who);
+
+        tr.appendChild(el('td', null, item.subject || '—'));
+        tr.appendChild(el('td', 'msg', item.message || '—'));
+        tr.appendChild(el('td', 'when', when(item.created_at)));
+
+        var st = el('td');
+        st.appendChild(statusSelect(item.status || 'open', ['open', 'handled'],
+          function (value, done) {
+            api('/api/admin/contacts/' + item.id, { method: 'PATCH', body: { status: value } })
+              .then(function (r) { done(r.ok); if (r.ok) { item.status = value; loadSummary(); } })
+              .catch(function () { done(false); });
+          }));
+        tr.appendChild(st);
+
+        return tr;
+      });
+
+      var wrap = $('queriesWrap');
+      wrap.textContent = '';
+      wrap.appendChild(table(['From', 'Subject', 'Message', 'Received', 'Status'], rows));
+    });
+  }
+
+  function loadVisitors() {
+    return api('/api/analytics/visitors').then(function (r) {
+      if (!r.ok) throw r;
+      return r.json();
+    }).then(function (d) {
+      $('cVisits').textContent = (d.totalVisitors || 0) + ' page views recorded';
+
+      var top = $('topPages');
+      top.textContent = '';
+      var pages = d.topPages || [];
+      if (!pages.length) {
+        top.appendChild(el('div', 'empty', 'No page views yet.'));
+      } else {
+        pages.forEach(function (p) {
+          var row = el('div', 'rowline');
+          row.appendChild(el('div', 'p', p.page));
+          row.appendChild(el('div', 'n', p.views));
+          top.appendChild(row);
+        });
+      }
+
+      var rec = $('recent');
+      rec.textContent = '';
+      var recent = (d.recentData || []).slice(0, 12);
+      if (!recent.length) {
+        rec.appendChild(el('div', 'empty', 'No activity yet.'));
+      } else {
+        recent.forEach(function (v) {
+          var row = el('div', 'rowline');
+          row.appendChild(el('div', 'p', v.page || '/'));
+          row.appendChild(el('div', 'n', when(v.timestamp)));
+          rec.appendChild(row);
+        });
+      }
+    });
+  }
+
+  function refreshAll() {
+    return Promise.all([loadSummary(), loadLeads(), loadQueries(), loadVisitors()])
+      .then(function () {
+        $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+      })
+      .catch(function (e) {
+        if (e && e.status === 401) return signOut('Session rejected. Enter the key again.');
+        $('updated').textContent = 'Update failed — retrying';
+      });
+  }
+
+  // ---------------- gate ----------------
+
+  function showApp() {
+    $('gate').style.display = 'none';
+    $('app').style.display = 'block';
+    refreshAll();
+    if (timer) clearInterval(timer);
+    timer = setInterval(refreshAll, REFRESH_MS);
+  }
+
+  function signOut(message) {
+    sessionStorage.removeItem(KEY_NAME);
+    if (timer) { clearInterval(timer); timer = null; }
+    $('app').style.display = 'none';
+    $('gate').style.display = 'grid';
+    $('gateErr').textContent = message || '';
+    $('key').value = '';
+  }
+
+  function attempt(candidate) {
+    sessionStorage.setItem(KEY_NAME, candidate);
+    return api('/api/admin/summary').then(function (r) {
+      if (r.ok) { showApp(); return true; }
+      sessionStorage.removeItem(KEY_NAME);
+      $('gateErr').textContent = r.status === 401
+        ? 'That key was not accepted.'
+        : r.status === 503
+          ? 'Admin API is disabled — ADMIN_API_KEY or SUPABASE_SERVICE_ROLE_KEY is not set on the server.'
+          : 'Unexpected response (' + r.status + ').';
+      return false;
+    }).catch(function () {
+      sessionStorage.removeItem(KEY_NAME);
+      $('gateErr').textContent = 'Could not reach the server.';
+      return false;
+    });
+  }
+
+  $('gateBtn').addEventListener('click', function () {
+    var v = $('key').value.trim();
+    if (!v) { $('gateErr').textContent = 'Enter the admin key.'; return; }
+    $('gateBtn').disabled = true;
+    $('gateErr').textContent = '';
+    attempt(v).then(function () { $('gateBtn').disabled = false; });
+  });
+
+  $('key').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('gateBtn').click();
+  });
+
+  $('refresh').addEventListener('click', refreshAll);
+  $('signout').addEventListener('click', function () { signOut(''); });
+
+  // Pause polling while the tab is hidden; catch up on return.
+  document.addEventListener('visibilitychange', function () {
+    if (!key()) return;
+    if (document.hidden) {
+      if (timer) { clearInterval(timer); timer = null; }
+    } else if (!timer) {
+      refreshAll();
+      timer = setInterval(refreshAll, REFRESH_MS);
+    }
+  });
+
+  if (key()) attempt(key()); else $('key').focus();
+})();
+</script>
+</body>
+</html>

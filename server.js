@@ -27,7 +27,7 @@ app.use(helmet({
 const allowedOrigin = process.env.ALLOWED_ORIGIN
   ? process.env.ALLOWED_ORIGIN.split(',').map((o) => o.trim()).filter(Boolean)
   : false;
-app.use(cors({ origin: allowedOrigin, methods: ['GET', 'POST'] }));
+app.use(cors({ origin: allowedOrigin, methods: ['GET', 'POST', 'PATCH'] }));
 
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true, limit: '100kb' }));
@@ -467,12 +467,111 @@ app.post('/api/contact', writeLimiter, async (req, res) => {
 });
 
 // ============================================
+// Admin portal API
+// ============================================
+const DEMO_STATUSES = ['pending', 'contacted', 'scheduled', 'closed'];
+const CONTACT_STATUSES = ['open', 'handled'];
+
+// Dashboard tiles. "Live" is anyone whose last page view was in the past
+// 5 minutes - the tracker fires once per page load, so this is activity, not
+// a persistent connection.
+app.get('/api/admin/summary', requireAdmin, async (req, res) => {
+  try {
+    const now = Date.now();
+    const since = (ms) => new Date(now - ms).toISOString();
+    const countOf = (table) =>
+      supabaseAdmin.from(table).select('*', { count: 'exact', head: true });
+
+    const [live, today, totalVisits, openLeads, openQueries] = await Promise.all([
+      countOf('visitors').gte('timestamp', since(5 * 60 * 1000)),
+      countOf('visitors').gte('timestamp', since(24 * 60 * 60 * 1000)),
+      countOf('visitors'),
+      countOf('demo_requests').eq('status', 'pending'),
+      countOf('contacts').eq('status', 'open'),
+    ]);
+
+    const failed = [live, today, totalVisits, openLeads, openQueries].find((r) => r.error);
+    if (failed) throw failed.error;
+
+    res.json({
+      success: true,
+      liveVisitors: live.count || 0,
+      visitorsToday: today.count || 0,
+      totalVisits: totalVisits.count || 0,
+      openLeads: openLeads.count || 0,
+      openQueries: openQueries.count || 0,
+    });
+  } catch (error) {
+    console.error('Error building admin summary:', error);
+    res.status(500).json({ success: false, message: 'Failed to build summary', error: error.message });
+  }
+});
+
+// Contact messages, newest first.
+app.get('/api/admin/contacts', requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ success: true, contacts: data || [] });
+  } catch (error) {
+    console.error('Error fetching contacts:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch contacts', error: error.message });
+  }
+});
+
+function statusUpdater(table, allowed, label) {
+  return async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { status } = req.body;
+
+      if (!Number.isInteger(id)) {
+        return res.status(400).json({ success: false, message: 'Invalid id' });
+      }
+      if (!allowed.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Status must be one of: ${allowed.join(', ')}`,
+        });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from(table)
+        .update({ status })
+        .eq('id', id)
+        .select();
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        return res.status(404).json({ success: false, message: `No such ${label}` });
+      }
+
+      res.json({ success: true, record: data[0] });
+    } catch (error) {
+      console.error(`Error updating ${label} status:`, error);
+      res.status(500).json({ success: false, message: 'Failed to update status', error: error.message });
+    }
+  };
+}
+
+app.patch('/api/admin/demo-requests/:id', requireAdmin, statusUpdater('demo_requests', DEMO_STATUSES, 'demo request'));
+app.patch('/api/admin/contacts/:id', requireAdmin, statusUpdater('contacts', CONTACT_STATUSES, 'contact'));
+
+// ============================================
 // Static frontend
 // ============================================
 // The API client is documented as living at the repo root, so serve it from there
 app.get('/healthos-api-client.js', (req, res) => {
   res.type('application/javascript');
   res.sendFile(path.join(__dirname, 'healthos-api-client.js'));
+});
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
