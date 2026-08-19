@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
+const path = require('path');
 
 dotenv.config();
 
@@ -368,6 +369,30 @@ app.post('/api/contact', async (req, res) => {
       error: error.message,
     });
   }
+});
+
+// ============================================
+// Static frontend
+// ============================================
+// The API client is documented as living at the repo root, so serve it from there
+app.get('/healthos-api-client.js', (req, res) => {
+  res.type('application/javascript');
+  res.sendFile(path.join(__dirname, 'healthos-api-client.js'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Unmatched /api/* requests get a JSON 404, never the HTML shell
+app.use('/api', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `No such endpoint: ${req.method} ${req.originalUrl}`,
+  });
+});
+
+// Everything else falls back to the single-page frontend
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ============================================

@@ -640,7 +640,7 @@
           </div>
           <div class="field">
             <label for="message">Message</label>
-            <textarea id="message" name="message" placeholder="Tell us a little about your hospital or question"></textarea>
+            <textarea id="message" name="message" required placeholder="Tell us a little about your hospital or question"></textarea>
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Send message</button>
           <div id="formStatus" class="form-status"></div>
@@ -663,6 +663,7 @@
   </div>
 </footer>
 
+<script src="/healthos-api-client.js"></script>
 <script>
 document.getElementById('year').textContent = new Date().getFullYear();
 
@@ -860,36 +861,39 @@ if (moneyEl) { moneyEl.dataset.count = '8400'; }
 })();
 
 /* ---------- Contact form -> backend API ---------- */
+// This page is served by the same Express app that exposes the API.
+HealthOSAPI.init({ apiUrl: window.location.origin });
+
 const form = document.getElementById('contactForm');
 const status = document.getElementById('formStatus');
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  status.textContent = 'Sending…';
+  status.textContent = 'Sending\u2026';
   status.className = 'form-status';
-  const payload = {
-    name: form.name.value.trim(),
-    email: form.email.value.trim(),
-    organisation: form.organisation.value.trim(),
-    role: form.role.value,
-    message: form.message.value.trim()
-  };
-  try {
-    const res = await fetch('/api/contact', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (res.ok && data.success) {
-      status.textContent = 'Thank you — we\'ll be in touch within one business day.';
-      status.className = 'form-status ok';
-      form.reset();
-    } else {
-      status.textContent = data.error || 'Something went wrong. Please try again.';
-      status.className = 'form-status err';
-    }
-  } catch (err) {
-    status.textContent = 'Could not reach the server. Please try again shortly.';
+
+  const fields = form.elements;
+  const organisation = fields.organisation.value.trim();
+  const role = fields.role.options[fields.role.selectedIndex].text;
+
+  // contacts has no organisation/role columns, so carry them through the subject
+  const subject = organisation
+    ? `Website enquiry \u2014 ${organisation} (${role})`
+    : `Website enquiry \u2014 ${role}`;
+
+  const data = await HealthOSAPI.submitContact({
+    name: fields.name.value.trim(),
+    email: fields.email.value.trim(),
+    subject,
+    message: fields.message.value.trim()
+  });
+
+  if (data && data.success) {
+    status.textContent = 'Thank you \u2014 we\'ll be in touch within one business day.';
+    status.className = 'form-status ok';
+    form.reset();
+  } else {
+    status.textContent = (data && data.message) || 'Could not reach the server. Please try again shortly.';
     status.className = 'form-status err';
   }
 });
