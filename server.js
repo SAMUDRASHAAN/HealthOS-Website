@@ -12,9 +12,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Render terminates TLS at a single proxy; without this req.ip is the proxy's
-// address, which would put every visitor in one rate-limit bucket.
-app.set('trust proxy', 1);
+// Requests arrive through Cloudflare and then Render's internal mesh, so
+// x-forwarded-for looks like "<client>, <cloudflare>, <render-internal>".
+// Counting 3 hops back from the socket lands on the real client; counting
+// from the right is also what makes it unspoofable, since anything a client
+// puts in the header themselves is pushed further left and ignored.
+// With the previous value of 1, req.ip was Render's internal address, which
+// both wasted the visitors.ip column and made express-rate-limit bucket by
+// proxy node instead of by visitor.
+app.set('trust proxy', 3);
 
 // Middleware
 app.use(helmet({
