@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
-const nodemailer = require('nodemailer');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const crypto = require('crypto');
@@ -128,25 +127,52 @@ function singleLine(value) {
 }
 
 // ============================================
-// Email configuration (Nodemailer)
+// Email configuration (Resend HTTPS API)
 // ============================================
-const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE || 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Render's free plan blocks outbound SMTP (ports 25, 465 and 587), so SMTP
+// clients time out before they ever authenticate. Notifications therefore go
+// out over HTTPS on 443, which is not blocked. Node has global fetch, so this
+// needs no extra dependency.
+const resendApiKey = process.env.RESEND_API_KEY;
+const teamEmail = process.env.TEAM_EMAIL;
 
-// Verify email connection
-if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD) {
-  transporter.verify((error, success) => {
-    if (error) {
-      console.log('Email transporter error:', error);
-    } else {
-      console.log('Email transporter is ready');
+// Resend lets you send from onboarding@resend.dev without owning a domain.
+// Until a domain is verified it will only deliver to the address the Resend
+// account was registered with - which is fine here, because every notification
+// goes to TEAM_EMAIL rather than to the person who filled in the form.
+const mailFrom = process.env.MAIL_FROM || 'HealthOS <onboarding@resend.dev>';
+
+if (!resendApiKey) {
+  console.warn('WARNING: RESEND_API_KEY not set - notification emails are disabled.');
+}
+if (!teamEmail) {
+  console.warn('WARNING: TEAM_EMAIL not set - notification emails are disabled.');
+}
+
+// Never throws: a submission must still succeed when notification fails.
+async function sendNotification(subject, html) {
+  if (!resendApiKey || !teamEmail) return;
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: mailFrom, to: [teamEmail], subject, html }),
+    });
+
+    if (!response.ok) {
+      console.error(`Notification email failed (${response.status}):`, await response.text());
+      return;
     }
-  });
+
+    const result = await response.json();
+    console.log('Notification email sent:', result.id);
+  } catch (error) {
+    console.error('Notification email error:', error.message);
+  }
 }
 
 // ============================================
@@ -210,10 +236,8 @@ app.post('/api/demo-request', writeLimiter, async (req, res) => {
     console.log('Demo request saved for:', email);
 
     // Send email notification to team
-    if (process.env.EMAIL_USER) {
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: process.env.TEAM_EMAIL || process.env.EMAIL_USER,
+    {
+      const notification = {
         subject: singleLine(`New Demo Request: ${name}`),
         html: `
           <h2>New Demo Request</h2>
@@ -228,13 +252,7 @@ app.post('/api/demo-request', writeLimiter, async (req, res) => {
         `,
       };
 
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.log('Error sending demo request email:', error);
-        } else {
-          console.log('Demo request email sent:', info.response);
-        }
-      });
+      sendNotification(notification.subject, notification.html);
     }
 
     res.json({
@@ -415,11 +433,9 @@ app.post('/api/contact', writeLimiter, async (req, res) => {
 
     console.log('Contact message saved from:', email);
 
-    // Send confirmation email
-    if (process.env.EMAIL_USER) {
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: process.env.TEAM_EMAIL || process.env.EMAIL_USER,
+    // Send email notification to team
+    {
+      const notification = {
         subject: singleLine(`New Contact: ${subject || 'General Inquiry'}`),
         html: `
           <h2>New Contact Message</h2>
@@ -432,13 +448,7 @@ app.post('/api/contact', writeLimiter, async (req, res) => {
         `,
       };
 
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.log('Error sending contact email:', error);
-        } else {
-          console.log('Contact email sent:', info.response);
-        }
-      });
+      sendNotification(notification.subject, notification.html);
     }
 
     res.json({
