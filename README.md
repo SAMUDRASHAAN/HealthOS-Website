@@ -1,110 +1,383 @@
-# HealthOS Website
+# HealthOS Website Backend
 
-A full-stack marketing website for HealthOS — animated, motion-driven frontend
-plus a real Express + SQLite backend for capturing demo requests and contact
-form leads.
+Production-ready Node.js/Express backend for the HealthOS website. Handles demo requests, visitor tracking, and lead generation with Supabase database integration.
 
-## What's inside
+## Features
 
-```
-healthos-website/
-├── server.js           # Express app — serves the site + API
-├── db.js                # SQLite setup (better-sqlite3, zero external DB needed)
-├── routes/contact.js    # POST /api/contact, GET /api/leads (admin)
-├── public/index.html    # The entire frontend — single self-contained file
-├── package.json
-└── healthos.db          # created automatically on first run
-```
+✨ **Core Features:**
+- 📅 Demo Request Management - Capture and track booking requests
+- 👥 Visitor Tracking - Log and analyze website traffic
+- 📬 Contact Form - Store inquiries and feedback
+- 📊 Analytics Endpoints - Query visitor data in real-time
+- 📧 Email Notifications - Automatic alerts for demo requests
 
-The frontend is one deliberately self-contained HTML file (inline CSS + JS,
-no build step) so it is trivial to preview, host anywhere, or hand to a
-designer to theme further. It includes:
+## Tech Stack
 
-- An animated hero network graph (SVG) showing Hospital / Pharmacy / Lab /
-  Patient / Bank nodes connected by live traveling data packets — the
-  platform's core metaphor, not a decorative gradient.
-- A hand-drawn ECG "pulse line" that draws itself in as you scroll between
-  sections.
-- Scroll-triggered reveals (IntersectionObserver, no external animation
-  library required).
-- A stat counter that animates up on scroll.
-- Fully responsive down to mobile, with a working hamburger menu.
-- `prefers-reduced-motion` respected — all animation is disabled for users
-  who've asked their OS to reduce motion.
-- Visible keyboard focus states on every interactive element.
+- **Runtime:** Node.js 18+
+- **Framework:** Express.js 4.18
+- **Database:** Supabase (PostgreSQL)
+- **Email:** Nodemailer + Gmail SMTP
+- **Deployment:** Render
 
-## Running it locally
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18 or higher
+- Supabase account with project created
+- Gmail account (for email notifications)
+
+### Installation
+
+1. **Clone or download the backend files to your repo:**
+   ```bash
+   git clone https://github.com/SAMUDRASHAAN/HealthOS-Website
+   cd HealthOS-Website
+   npm install
+   ```
+
+2. **Create `.env` file with your credentials:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Edit `.env` and fill in your details:**
+   ```env
+   PORT=5000
+   NODE_ENV=production
+   
+   # Your Supabase credentials
+   SUPABASE_URL=https://hfaryhdnwhwvsiootewc.supabase.co
+   SUPABASE_ANON_KEY=sb_publishable_avRJJGqM1ikliXbdzkzymA_S_w-nf0r
+   
+   # Your email configuration
+   EMAIL_USER=your-gmail@gmail.com
+   EMAIL_PASSWORD=your-app-specific-password
+   TEAM_EMAIL=team@healthos.com
+   ```
+
+### Gmail Setup (for Email Notifications)
+
+1. Go to https://myaccount.google.com/security
+2. Enable 2-Step Verification
+3. Generate "App Password" for Gmail
+4. Use that password in `.env` as `EMAIL_PASSWORD`
+
+### Running Locally
 
 ```bash
-npm install
-npm start
+npm run dev
 ```
 
-Then open **http://localhost:4000** — the same server serves both the
-website and the API, so the contact form works immediately with no extra
-configuration.
+Server starts on `http://localhost:5000`
 
-## Environment variables (optional)
+## API Endpoints
 
-Create a `.env` file (not required to run locally, but recommended for
-production):
-
+### Health Check
 ```
-PORT=4000
-ALLOWED_ORIGIN=https://your-production-domain.com
-ADMIN_API_KEY=choose-a-long-random-string
+GET /api/health
+```
+Returns: `{ status: "ok", timestamp: "..." }`
+
+### Demo Request (POST)
+```
+POST /api/demo-request
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+1234567890",
+  "company": "Acme Hospital",
+  "message": "Interested in scheduling a demo",
+  "requestedDate": "2024-12-25"
+}
 ```
 
-`ADMIN_API_KEY` protects the `GET /api/leads` endpoint. Without it, that
-route is disabled entirely (returns 401 to everyone) — it will not work
-until you set a key.
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Demo request received. We will contact you soon!",
+  "demoRequest": { ... }
+}
+```
 
-## Viewing submitted leads
+### Track Visitor (POST)
+```
+POST /api/track-visitor
+Content-Type: application/json
+
+{
+  "page": "/pricing",
+  "referrer": "google.com",
+  "userAgent": "Mozilla/5.0...",
+  "timestamp": "2024-12-20T10:30:00Z"
+}
+```
+
+### Get Visitor Analytics (GET)
+```
+GET /api/analytics/visitors
+```
+
+Returns visitor counts, top pages, and recent activity.
+
+### Get Demo Requests (GET)
+```
+GET /api/demo-requests
+```
+
+Returns all demo requests (admin endpoint).
+
+### Contact Form (POST)
+```
+POST /api/contact
+Content-Type: application/json
+
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "subject": "Question about pricing",
+  "message": "I have a question..."
+}
+```
+
+## Frontend Integration
+
+### 1. Add the API Client Script
+
+```html
+<script src="healthos-api-client.js"></script>
+<script>
+  HealthOSAPI.init({
+    apiUrl: 'https://your-render-url.onrender.com'
+  });
+</script>
+```
+
+### 2. Use in Your Forms
+
+```html
+<form onsubmit="submitDemo(event)">
+  <input type="text" id="name" placeholder="Your Name" required>
+  <input type="email" id="email" placeholder="Your Email" required>
+  <input type="tel" id="phone" placeholder="Your Phone" required>
+  <button type="submit">Request Demo</button>
+</form>
+
+<script>
+  async function submitDemo(event) {
+    event.preventDefault();
+    
+    const result = await HealthOSAPI.submitDemoRequest({
+      name: document.getElementById('name').value,
+      email: document.getElementById('email').value,
+      phone: document.getElementById('phone').value,
+    });
+    
+    if (result.success) {
+      alert('Demo request submitted!');
+    }
+  }
+</script>
+```
+
+### 3. Track Visitors (Automatic)
+
+Visitor tracking is automatic when you initialize the API client:
+
+```html
+<script src="healthos-api-client.js"></script>
+<script>
+  HealthOSAPI.init({
+    apiUrl: 'https://your-render-url.onrender.com'
+  });
+  // Visitor is automatically tracked on page load
+</script>
+```
+
+## Deployment to Render
+
+### 1. Push Code to GitHub
 
 ```bash
-curl -H "x-admin-key: your-key-here" http://localhost:4000/api/leads
+git add .
+git commit -m "Add HealthOS backend"
+git push origin main
 ```
 
-Returns the most recent 200 submissions as JSON. For real production use,
-swap this for a proper admin dashboard or wire it into a CRM — this
-endpoint is intentionally minimal.
+### 2. Deploy to Render
 
-## Deploying
+1. Go to https://render.com
+2. Create a new "Web Service"
+3. Connect your GitHub repository
+4. Set build command: `npm install`
+5. Set start command: `node server.js`
+6. Add environment variables:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `EMAIL_USER`
+   - `EMAIL_PASSWORD`
+   - `TEAM_EMAIL`
+   - `NODE_ENV=production`
 
-This is one Node process serving both the static site and the API, so it
-deploys as a single unit. It runs cleanly on:
+7. Deploy
 
-- **Render / Railway / Fly.io** — push the repo, set the start command to
-  `npm start`, add your environment variables.
-- **A VPS** — `npm install --production && npm start`, put it behind Nginx
-  or Caddy with a TLS certificate, and use a process manager like `pm2` to
-  keep it running.
-- **AWS EC2 / Lightsail** — matches the same AWS Mumbai (ap-south-1) region
-  used across the rest of the HealthOS platform, keeping all data
-  in-country.
+Your backend will be live at: `https://your-service.onrender.com`
 
-If you outgrow SQLite (heavy traffic, multiple server instances), swap
-`db.js` for a PostgreSQL connection — the query surface is small enough
-that this is a same-day change.
+## Database Schema
 
-## Extending the frontend
+### demo_requests
+```sql
+{
+  id: BIGINT PRIMARY KEY,
+  name: TEXT,
+  email: TEXT,
+  phone: TEXT,
+  company: TEXT,
+  message: TEXT,
+  requested_date: TIMESTAMP,
+  status: TEXT,
+  created_at: TIMESTAMP
+}
+```
 
-Because everything lives in one file, the easiest way to grow this into a
-multi-page site is:
+### visitors
+```sql
+{
+  id: BIGINT PRIMARY KEY,
+  page: TEXT,
+  referrer: TEXT,
+  user_agent: TEXT,
+  ip: TEXT,
+  timestamp: TIMESTAMP
+}
+```
 
-1. Duplicate `public/index.html` into `public/security.html`,
-   `public/pricing.html`, etc.
-2. Keep the shared `<style>` block identical across pages so the design
-   language stays consistent — consider extracting it to `public/styles.css`
-   once you have 3+ pages.
-3. Update `server.js`'s catch-all route if you add client-side routing;
-   right now every unmatched path falls back to `index.html`.
+### contacts
+```sql
+{
+  id: BIGINT PRIMARY KEY,
+  name: TEXT,
+  email: TEXT,
+  subject: TEXT,
+  message: TEXT,
+  created_at: TIMESTAMP
+}
+```
 
-## Notes on the copy
+## Environment Variables
 
-The statistics and figures in the "problem" section reflect the numbers
-already used across the HealthOS pitch deck and DPR (paper records, out-of-
-pocket spend, duplicate diagnostics). Update `data-count` attributes in
-`public/index.html` if these are refined with sourced figures before
-public launch — they are currently illustrative marketing figures, not
-independently cited statistics.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Server port (default: 5000) |
+| `NODE_ENV` | No | Environment (development/production) |
+| `SUPABASE_URL` | Yes | Your Supabase project URL |
+| `SUPABASE_ANON_KEY` | Yes | Supabase public/anon key |
+| `EMAIL_SERVICE` | No | Email provider (default: gmail) |
+| `EMAIL_USER` | Yes | Email address for sending |
+| `EMAIL_PASSWORD` | Yes | Email app password |
+| `TEAM_EMAIL` | Yes | Email to receive notifications |
+
+## Error Handling
+
+All endpoints return consistent JSON responses:
+
+**Success:**
+```json
+{
+  "success": true,
+  "message": "...",
+  "data": { ... }
+}
+```
+
+**Error:**
+```json
+{
+  "success": false,
+  "message": "Error description",
+  "error": "Technical error details"
+}
+```
+
+## Troubleshooting
+
+### Email not sending
+- ✅ Enable 2FA on Gmail
+- ✅ Use app-specific password (not regular password)
+- ✅ Check TEAM_EMAIL is set
+- ✅ Check firewall/antivirus allows SMTP
+
+### Supabase connection fails
+- ✅ Verify URL and key are correct
+- ✅ Check project is active in Supabase dashboard
+- ✅ Ensure tables exist (demo_requests, visitors, contacts)
+- ✅ Check CORS settings in Supabase
+
+### CORS errors
+- ✅ Backend has CORS enabled for all origins
+- ✅ Check your frontend is sending requests to correct API URL
+- ✅ Verify API URL doesn't have trailing slash
+
+### Forms not submitting
+- ✅ Check browser console for errors
+- ✅ Verify API URL in HealthOSAPI.init()
+- ✅ Check network tab for API requests
+- ✅ Ensure backend is running
+
+## Performance & Scaling
+
+- **Indexing:** All tables have indexes on frequently queried columns
+- **Rate Limiting:** Consider adding rate limiting for production
+- **Caching:** API responses can be cached at CDN level
+- **Pagination:** Implement pagination for large datasets
+
+## Security Considerations
+
+- ✅ Input validation on all endpoints
+- ✅ Email format validation
+- ✅ Environment variables for secrets
+- ✅ CORS enabled
+- ✅ SQL injection prevention (Supabase client)
+
+**To Improve:**
+- Add API key authentication for admin endpoints
+- Add rate limiting middleware
+- Add input sanitization for HTML/XSS
+- Use HTTPS only (handled by Render)
+
+## Files Structure
+
+```
+├── server.js                      # Main Express server
+├── healthos-api-client.js        # Frontend JavaScript client
+├── package.json                   # Dependencies
+├── .env.example                   # Environment template
+├── .gitignore                     # Git ignore rules
+├── README.md                      # This file
+├── BACKEND_SETUP.md              # Detailed setup guide
+└── api-integration-example.html  # Complete integration example
+```
+
+## Support & Help
+
+For issues or questions:
+1. Check the troubleshooting section above
+2. Review API response messages
+3. Check browser console for errors
+4. Check server logs: `npm run dev`
+
+## Next Steps
+
+1. ✅ Backend deployed to Render
+2. ✅ Database tables created in Supabase
+3. ⬜ Add email configuration
+4. ⬜ Integrate forms in frontend
+5. ⬜ Test with sample requests
+6. ⬜ Set up analytics dashboard
+
+## License
+
+MIT - See your project for details
