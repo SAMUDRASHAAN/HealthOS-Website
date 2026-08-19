@@ -187,17 +187,6 @@ async function sendNotification(subject, html) {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  // TEMPORARY proxy probe: every visitors.ip row is a 10.x Render internal
-  // address, so `trust proxy` is under-counting hops. Log what the chain
-  // actually sends, then calibrate and delete this block.
-  console.log('[proxy-probe] ' + JSON.stringify({
-    reqIp: req.ip,
-    reqIps: req.ips,
-    xForwardedFor: req.headers['x-forwarded-for'] || null,
-    xRealIp: req.headers['x-real-ip'] || null,
-    trustProxy: app.get('trust proxy'),
-  }));
-
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
