@@ -377,10 +377,10 @@
       <a href="#security">Security</a>
       <a href="#finance">Finance</a>
       <a href="#contact">Contact</a>
-      <a href="#contact" class="btn btn-primary mobile-cta">Request a demo</a>
+      <a href="#demo" class="btn btn-primary mobile-cta">Request a demo</a>
     </div>
     <div class="nav-cta">
-      <a href="#contact" class="btn btn-primary">Request a demo</a>
+      <a href="#demo" class="btn btn-primary">Request a demo</a>
       <button class="hamburger" id="hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="navLinks"><span></span><span></span><span></span></button>
     </div>
   </div>
@@ -401,7 +401,7 @@
       <h1 class="reveal">One record.<br>Every hospital.<br><em>One country.</em></h1>
       <p class="lede reveal">HealthOS connects hospitals, pharmacies, labs, and patients under a single patient identity — so a diagnosis takes minutes, not weeks, and no record is ever lost between buildings again.</p>
       <div class="hero-ctas reveal">
-        <a href="#contact" class="btn btn-primary">Request a demo</a>
+        <a href="#demo" class="btn btn-primary">Request a demo</a>
         <a href="#journey" class="btn btn-ghost">See how it works ↓</a>
       </div>
       <div class="hero-proof reveal">
@@ -607,6 +607,46 @@
   </svg>
 
   <!-- CONTACT -->
+  <section class="section-pad" id="demo" style="background:var(--porcelain-2)">
+    <div class="wrap">
+      <div class="contact-shell">
+        <div class="reveal">
+          <div class="eyebrow">Book a demo</div>
+          <h2 style="font-size:clamp(26px,3.4vw,38px); margin-top:18px;">See it running on your own workflows.</h2>
+          <p style="color:var(--mist); margin-top:18px; line-height:1.65; font-size:15.5px;">We’ll walk through OPD queues, IPD beds and billing the way your hospital actually runs them, so you can see where HealthOS fits before anything changes. Pick a date that suits you and we’ll confirm within one business day.</p>
+        </div>
+        <form id="demoForm" class="reveal">
+          <div class="field">
+            <label for="demoName">Full name</label>
+            <input type="text" id="demoName" name="name" required>
+          </div>
+          <div class="field">
+            <label for="demoEmail">Email</label>
+            <input type="email" id="demoEmail" name="email" required>
+          </div>
+          <div class="field">
+            <label for="demoPhone">Phone</label>
+            <input type="tel" id="demoPhone" name="phone" required>
+          </div>
+          <div class="field">
+            <label for="demoCompany">Hospital / organisation</label>
+            <input type="text" id="demoCompany" name="company">
+          </div>
+          <div class="field">
+            <label for="demoDate">Preferred date</label>
+            <input type="date" id="demoDate" name="requestedDate">
+          </div>
+          <div class="field">
+            <label for="demoNotes">Anything we should prepare</label>
+            <textarea id="demoNotes" name="message" placeholder="Bed count, the system you run today, or what you’d most like to see"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Request demo</button>
+          <div id="demoStatus" class="form-status"></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <section class="section-pad" id="contact">
     <div class="wrap">
       <div class="contact-shell">
@@ -897,6 +937,38 @@ form.addEventListener('submit', async (e) => {
     status.className = 'form-status err';
   }
 });
+/* ---------- Demo request form -> backend API ---------- */
+const demoForm = document.getElementById('demoForm');
+const demoStatus = document.getElementById('demoStatus');
+
+// A demo can only be requested for today or later.
+demoForm.elements.requestedDate.min = new Date().toISOString().slice(0, 10);
+
+demoForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  demoStatus.textContent = 'Sending\u2026';
+  demoStatus.className = 'form-status';
+
+  const f = demoForm.elements;
+  const data = await HealthOSAPI.submitDemoRequest({
+    name: f.name.value.trim(),
+    email: f.email.value.trim(),
+    phone: f.phone.value.trim(),
+    company: f.company.value.trim(),
+    requestedDate: f.requestedDate.value,
+    message: f.message.value.trim()
+  });
+
+  if (data && data.success) {
+    demoStatus.textContent = 'Thank you \u2014 we\'ll confirm your demo within one business day.';
+    demoStatus.className = 'form-status ok';
+    demoForm.reset();
+  } else {
+    demoStatus.textContent = (data && data.message) || 'Could not reach the server. Please try again shortly.';
+    demoStatus.className = 'form-status err';
+  }
+});
+
 </script>
 </body>
 </html>
