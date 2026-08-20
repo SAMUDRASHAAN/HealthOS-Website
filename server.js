@@ -178,9 +178,9 @@ if (!teamEmail) {
   console.warn('WARNING: TEAM_EMAIL not set - notification emails are disabled.');
 }
 
-// Never throws: a submission must still succeed when notification fails.
-async function sendNotification(subject, html) {
-  if (!resendApiKey || !teamEmail) return;
+// Never throws: a submission must still succeed when mail fails.
+async function sendMail(to, subject, html, label) {
+  if (!resendApiKey || !to) return false;
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -189,19 +189,62 @@ async function sendNotification(subject, html) {
         Authorization: `Bearer ${resendApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: mailFrom, to: [teamEmail], subject, html }),
+      body: JSON.stringify({ from: mailFrom, to: [to], subject, html }),
     });
 
     if (!response.ok) {
-      console.error(`Notification email failed (${response.status}):`, await response.text());
-      return;
+      console.error(`${label} email failed (${response.status}):`, await response.text());
+      return false;
     }
 
     const result = await response.json();
-    console.log('Notification email sent:', result.id);
+    console.log(`${label} email sent:`, result.id);
+    return true;
   } catch (error) {
-    console.error('Notification email error:', error.message);
+    console.error(`${label} email error:`, error.message);
+    return false;
   }
+}
+
+function sendNotification(subject, html) {
+  return sendMail(teamEmail, subject, html, 'Notification');
+}
+
+// Acknowledge the person who filled the form. Until a domain is verified in
+// Resend this will be rejected for anyone but the account holder, which is
+// why the failure is logged and swallowed rather than surfaced.
+function sendAcknowledgement(to, name, kind) {
+  const heading = kind === 'demo'
+    ? 'Thanks for requesting a HealthOS demo'
+    : 'Thanks for getting in touch with HealthOS';
+  const line = kind === 'demo'
+    ? 'We have your demo request and will confirm a time within one business day.'
+    : 'We have your message and will reply within one business day.';
+
+  return sendMail(to, heading, `
+    <p>Hi ${escapeHtml(name)},</p>
+    <p>${line}</p>
+    <p>If anything changes in the meantime, just reply to this email.</p>
+    <p>&mdash; The HealthOS team</p>
+    <hr>
+    <p><small>You are receiving this because you submitted a form on the HealthOS
+    website and agreed to be contacted. Ask us any time to delete your details.</small></p>
+  `, 'Acknowledgement');
+}
+
+// Surfaces failures that would otherwise sit unread in the logs.
+let lastAlertAt = 0;
+function alertAdmin(context, error) {
+  const now = Date.now();
+  if (now - lastAlertAt < 15 * 60 * 1000) return; // at most one every 15 minutes
+  lastAlertAt = now;
+
+  sendMail(teamEmail, `HealthOS error: ${context}`, `
+    <h2>Unhandled error</h2>
+    <p><strong>Where:</strong> ${escapeHtml(context)}</p>
+    <p><strong>Message:</strong> ${escapeHtml(error && error.message ? error.message : String(error))}</p>
+    <p><small>${new Date().toISOString()}</small></p>
+  `, 'Alert');
 }
 
 // ============================================
@@ -298,6 +341,7 @@ app.post('/api/demo-request', writeLimiter, async (req, res) => {
       };
 
       sendNotification(notification.subject, notification.html);
+      sendAcknowledgement(email, name, 'demo');
     }
 
     res.json({
@@ -546,6 +590,7 @@ app.post('/api/contact', writeLimiter, async (req, res) => {
       };
 
       sendNotification(notification.subject, notification.html);
+      sendAcknowledgement(email, name, 'contact');
     }
 
     res.json({
@@ -655,6 +700,71 @@ function statusUpdater(table, allowed, label) {
   };
 }
 
+// Digest of anything going stale. Render's free plan has no scheduler, so this
+// is an endpoint rather than a cron: point any external pinger at it with the
+// admin key, or hit it from the portal. Also answers GET so a plain uptime
+// monitor can drive it, which doubles as a keep-warm ping.
+async function buildDigest(days) {
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const [staleLeads, staleQueries, recentLeads, recentQueries] = await Promise.all([
+    supabaseAdmin.from('demo_requests').select('*').eq('status', 'pending').lt('created_at', cutoff).order('created_at'),
+    supabaseAdmin.from('contacts').select('*').eq('status', 'open').lt('created_at', cutoff).order('created_at'),
+    supabaseAdmin.from('demo_requests').select('*', { count: 'exact', head: true }).gte('created_at', cutoff),
+    supabaseAdmin.from('contacts').select('*', { count: 'exact', head: true }).gte('created_at', cutoff),
+  ]);
+
+  const failed = [staleLeads, staleQueries, recentLeads, recentQueries].find((r) => r.error);
+  if (failed) throw failed.error;
+
+  return {
+    days,
+    staleLeads: staleLeads.data || [],
+    staleQueries: staleQueries.data || [],
+    newLeads: recentLeads.count || 0,
+    newQueries: recentQueries.count || 0,
+  };
+}
+
+async function digestHandler(req, res) {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90);
+    const d = await buildDigest(days);
+
+    const rows = (list, fields) => list.length
+      ? list.map((i) => `<li>${fields.map((f) => escapeHtml(i[f] || '—')).join(' &middot; ')}
+          <small>(${Math.floor((Date.now() - new Date(String(i.created_at).replace(' ', 'T') + 'Z')) / 86400000)}d old)</small></li>`).join('')
+      : '<li><em>none</em></li>';
+
+    const html = `
+      <h2>HealthOS &mdash; last ${d.days} days</h2>
+      <p><strong>${d.newLeads}</strong> new demo request(s), <strong>${d.newQueries}</strong> new message(s).</p>
+      <h3>Demo requests still pending after ${d.days} days (${d.staleLeads.length})</h3>
+      <ul>${rows(d.staleLeads, ['name', 'company', 'email', 'phone'])}</ul>
+      <h3>Messages still open after ${d.days} days (${d.staleQueries.length})</h3>
+      <ul>${rows(d.staleQueries, ['name', 'email', 'subject'])}</ul>
+      <hr><p><small>Generated ${new Date().toISOString()}</small></p>
+    `;
+
+    const sent = await sendMail(teamEmail, `HealthOS digest: ${d.staleLeads.length + d.staleQueries.length} item(s) need attention`, html, 'Digest');
+
+    res.json({
+      success: true,
+      emailed: sent,
+      newLeads: d.newLeads,
+      newQueries: d.newQueries,
+      staleLeads: d.staleLeads.length,
+      staleQueries: d.staleQueries.length,
+    });
+  } catch (error) {
+    console.error('Error building digest:', error);
+    res.status(500).json({ success: false, message: 'Failed to build digest', error: error.message });
+  }
+}
+
+app.get('/api/admin/digest', requireAdmin, digestHandler);
+app.post('/api/admin/digest', requireAdmin, digestHandler);
+
 app.patch('/api/admin/demo-requests/:id', requireAdmin, statusUpdater('demo_requests', DEMO_STATUSES, 'demo request'));
 app.patch('/api/admin/contacts/:id', requireAdmin, statusUpdater('contacts', CONTACT_STATUSES, 'contact'));
 
@@ -691,6 +801,7 @@ app.get('*', (req, res) => {
 // ============================================
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
+  alertAdmin(`${req.method} ${req.originalUrl}`, err);
   res.status(500).json({
     success: false,
     message: 'Internal server error',
