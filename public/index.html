@@ -652,9 +652,12 @@
             <label for="demoWebsite">Leave this field empty</label>
             <input type="text" id="demoWebsite" name="website" tabindex="-1" autocomplete="off">
           </div>
+          <p id="bookingLine" style="display:none; font-size:13.5px; color:var(--mist); margin:0 0 16px;">
+            Prefer to pick a slot yourself? <a id="bookingLink" href="#" target="_blank" rel="noopener">See available times</a>.
+          </p>
           <div class="consent">
             <input type="checkbox" id="demoConsent" name="consent" required>
-            <label for="demoConsent">I agree that HealthOS may contact me about this request and store the details I have provided. We keep them only to respond to you, and you can ask us to delete them at any time.</label>
+            <label for="demoConsent">I agree that HealthOS may contact me about this request and store the details I have provided. We keep them only to respond to you, and you can ask us to delete them at any time. See our <a href="/privacy.html" target="_blank" rel="noopener">Privacy Notice</a>.</label>
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Request demo</button>
           <div id="demoStatus" class="form-status"></div>
@@ -704,7 +707,7 @@
           </div>
           <div class="consent">
             <input type="checkbox" id="contactConsent" name="consent" required>
-            <label for="contactConsent">I agree that HealthOS may contact me about this message and store the details I have provided. We keep them only to respond to you, and you can ask us to delete them at any time.</label>
+            <label for="contactConsent">I agree that HealthOS may contact me about this message and store the details I have provided. We keep them only to respond to you, and you can ask us to delete them at any time. See our <a href="/privacy.html" target="_blank" rel="noopener">Privacy Notice</a>.</label>
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Send message</button>
           <div id="formStatus" class="form-status"></div>
@@ -719,6 +722,7 @@
   <div class="wrap footer-inner">
     <div class="footer-note">© <span id="year"></span> HealthOS · Vanijya Nirman Enterprises · Data stored in AWS Mumbai · DPDP Act 2023 compliant</div>
     <div class="footer-links">
+      <a href="/privacy.html">Privacy</a>
       <a href="#platform">Platform</a>
       <a href="#security">Security</a>
       <a href="#finance">Finance</a>
@@ -1017,6 +1021,15 @@ demoForm.addEventListener('submit', async (e) => {
 
   document.querySelectorAll('section[id]').forEach((el) => io.observe(el));
 })();
+/* ---------- Optional self-serve booking, shown only when configured ---------- */
+fetch('/api/config')
+  .then(function (r) { return r.json(); })
+  .then(function (c) {
+    if (!c || !c.bookingUrl) return;
+    document.getElementById('bookingLink').href = c.bookingUrl;
+    document.getElementById('bookingLine').style.display = 'block';
+  })
+  .catch(function () { /* the form works fine without it */ });
 </script>
 </body>
 </html>

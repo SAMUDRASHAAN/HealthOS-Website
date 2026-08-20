@@ -976,6 +976,55 @@ async function digestHandler(req, res) {
   }
 }
 
+// ---------- data retention ----------
+// visitors and page_events now hold a real IP and a persistent id, which makes
+// them personal data rather than anonymous counts. Purge on a rolling window.
+// Leads are deliberately NOT purged: those are business records, and deleting
+// them is a decision for a person, not a timer.
+const RETENTION_DAYS = Math.min(Math.max(parseInt(process.env.RETENTION_DAYS, 10) || 90, 7), 3650);
+
+async function purgeHandler(req, res) {
+  try {
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+    const [v, e] = await Promise.all([
+      supabaseAdmin.from('visitors').delete().lt('timestamp', cutoff).select('id'),
+      supabaseAdmin.from('page_events').delete().lt('created_at', cutoff).select('id'),
+    ]);
+
+    const failed = [v, e].find((r) => r.error);
+    if (failed) throw failed.error;
+
+    const removed = (v.data || []).length + (e.data || []).length;
+    if (removed) audit('retention_purge', 'analytics', null, `${removed} rows older than ${RETENTION_DAYS}d`);
+
+    res.json({
+      success: true,
+      retentionDays: RETENTION_DAYS,
+      visitorsRemoved: (v.data || []).length,
+      eventsRemoved: (e.data || []).length,
+    });
+  } catch (error) {
+    console.error('Error purging old analytics:', error);
+    res.status(500).json({ success: false, message: 'Failed to purge', error: error.message });
+  }
+}
+
+app.get('/api/admin/purge', requireAdmin, purgeHandler);
+app.post('/api/admin/purge', requireAdmin, purgeHandler);
+
+// ---------- public config ----------
+// Lets the page show a booking link only once one is configured, without
+// baking a vendor URL into the markup.
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    bookingUrl: process.env.BOOKING_URL || null,
+    consentVersion: CONSENT_VERSION,
+    retentionDays: RETENTION_DAYS,
+  });
+});
+
 app.get('/api/admin/digest', requireAdmin, digestHandler);
 app.post('/api/admin/digest', requireAdmin, digestHandler);
 
