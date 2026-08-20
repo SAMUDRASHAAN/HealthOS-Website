@@ -128,6 +128,29 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+// Bump when the consent wording changes, so old records keep their own version.
+const CONSENT_VERSION = process.env.CONSENT_VERSION || '2026-08-20.v1';
+
+// Pull campaign attribution off a submission. Trimmed and length-capped so a
+// crafted payload cannot stuff the column.
+function sourceFields(body) {
+  var cap = function (v) {
+    return typeof v === 'string' && v.trim() ? v.trim().slice(0, 500) : null;
+  };
+  return {
+    referrer: cap(body.referrer),
+    landing_page: cap(body.landingPage),
+    utm_source: cap(body.utmSource),
+    utm_medium: cap(body.utmMedium),
+    utm_campaign: cap(body.utmCampaign),
+  };
+}
+
+// Bots fill every field they find. A real person never sees this one.
+function isBot(body) {
+  return typeof body.website === 'string' && body.website.trim() !== '';
+}
+
 function singleLine(value) {
   return String(value == null ? '' : value).replace(/[\r\n]+/g, ' ').trim();
 }
@@ -195,7 +218,19 @@ app.get('/api/health', (req, res) => {
 // ============================================
 app.post('/api/demo-request', writeLimiter, async (req, res) => {
   try {
-    const { name, email, phone, company, message, requestedDate } = req.body;
+    const { name, email, phone, company, message, requestedDate, consent } = req.body;
+
+    // Silently accept and discard: telling a bot it failed teaches it to adapt.
+    if (isBot(req.body)) {
+      return res.json({ success: true, message: 'Demo request received. We will contact you soon!' });
+    }
+
+    if (consent !== true) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please agree to be contacted before submitting.',
+      });
+    }
 
     // Validation
     if (!name || !email || !phone) {
@@ -222,6 +257,10 @@ app.post('/api/demo-request', writeLimiter, async (req, res) => {
       message: message || '',
       requested_date: requestedDate || new Date().toISOString(),
       status: 'pending',
+      consent_given: true,
+      consent_version: CONSENT_VERSION,
+      consent_at: new Date().toISOString(),
+      ...sourceFields(req.body),
     };
 
     // Save to Supabase
@@ -281,7 +320,7 @@ app.post('/api/demo-request', writeLimiter, async (req, res) => {
 // ============================================
 app.post('/api/track-visitor', trackingLimiter, async (req, res) => {
   try {
-    const { page, referrer, userAgent, timestamp } = req.body;
+    const { page, referrer, userAgent, timestamp, visitorId } = req.body;
 
     const visitorRecord = {
       page: page || '/',
@@ -289,6 +328,7 @@ app.post('/api/track-visitor', trackingLimiter, async (req, res) => {
       user_agent: userAgent || req.headers['user-agent'],
       ip: req.ip || req.connection.remoteAddress,
       timestamp: timestamp || new Date().toISOString(),
+      visitor_id: typeof visitorId === 'string' ? visitorId.slice(0, 64) : null,
     };
 
     // Save to Supabase
@@ -314,6 +354,42 @@ app.post('/api/track-visitor', trackingLimiter, async (req, res) => {
       success: true,
       message: 'Visitor tracked (with error)',
     });
+  }
+});
+
+// ============================================
+// 2b. PAGE EVENTS (funnel steps + section engagement)
+// ============================================
+// Whitelisted so the table cannot be filled with arbitrary event names.
+const TRACKED_EVENTS = [
+  'section_view',
+  'demo_form_view',
+  'contact_form_view',
+  'demo_submit',
+  'contact_submit',
+];
+
+app.post('/api/track-event', trackingLimiter, async (req, res) => {
+  try {
+    const { event, detail, visitorId } = req.body;
+
+    if (!TRACKED_EVENTS.includes(event)) {
+      return res.status(400).json({ success: false, message: 'Unknown event' });
+    }
+
+    const { error } = await supabase.from('page_events').insert([{
+      visitor_id: typeof visitorId === 'string' ? visitorId.slice(0, 64) : null,
+      event,
+      detail: typeof detail === 'string' ? detail.slice(0, 120) : null,
+    }]);
+
+    if (error) console.error('Supabase page_event insert error:', error);
+
+    // Tracking is never allowed to surface as a failure to the visitor.
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error tracking event:', error);
+    res.json({ success: true });
   }
 });
 
@@ -407,7 +483,18 @@ app.get('/api/demo-requests', requireAdmin, async (req, res) => {
 // ============================================
 app.post('/api/contact', writeLimiter, async (req, res) => {
   try {
-    const { name, email, subject, message } = req.body;
+    const { name, email, subject, message, consent } = req.body;
+
+    if (isBot(req.body)) {
+      return res.json({ success: true, message: 'Message received. Thank you for contacting us!' });
+    }
+
+    if (consent !== true) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please agree to be contacted before submitting.',
+      });
+    }
 
     if (!name || !email || !message) {
       return res.status(400).json({
@@ -421,6 +508,10 @@ app.post('/api/contact', writeLimiter, async (req, res) => {
       email,
       subject: subject || 'General Inquiry',
       message,
+      consent_given: true,
+      consent_version: CONSENT_VERSION,
+      consent_at: new Date().toISOString(),
+      ...sourceFields(req.body),
     };
 
     // Save to Supabase

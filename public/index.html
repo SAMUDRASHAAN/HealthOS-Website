@@ -342,6 +342,14 @@
     background:var(--porcelain); color:var(--ink);
   }
   .field textarea{ resize:vertical; min-height:90px; }
+  .consent{ display:flex; gap:10px; align-items:flex-start; margin:4px 0 18px; }
+  .consent input{ width:16px; height:16px; margin-top:2px; flex:none; accent-color:var(--pulse); }
+  .consent label{
+    font-family:var(--sans); font-size:13px; line-height:1.5; color:var(--mist);
+    text-transform:none; letter-spacing:0; margin:0;
+  }
+  /* honeypot: off-screen rather than display:none, which some bots skip */
+  .hp{ position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
   .form-status{
     font-size:13.5px; margin-top:16px; min-height:20px;
     font-family:var(--mono);
@@ -640,6 +648,14 @@
             <label for="demoNotes">Anything we should prepare</label>
             <textarea id="demoNotes" name="message" placeholder="Bed count, the system you run today, or what you’d most like to see"></textarea>
           </div>
+          <div class="hp" aria-hidden="true">
+            <label for="demoWebsite">Leave this field empty</label>
+            <input type="text" id="demoWebsite" name="website" tabindex="-1" autocomplete="off">
+          </div>
+          <div class="consent">
+            <input type="checkbox" id="demoConsent" name="consent" required>
+            <label for="demoConsent">I agree that HealthOS may contact me about this request and store the details I have provided. We keep them only to respond to you, and you can ask us to delete them at any time.</label>
+          </div>
           <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Request demo</button>
           <div id="demoStatus" class="form-status"></div>
         </form>
@@ -681,6 +697,14 @@
           <div class="field">
             <label for="message">Message</label>
             <textarea id="message" name="message" required placeholder="Tell us a little about your hospital or question"></textarea>
+          </div>
+          <div class="hp" aria-hidden="true">
+            <label for="contactWebsite">Leave this field empty</label>
+            <input type="text" id="contactWebsite" name="website" tabindex="-1" autocomplete="off">
+          </div>
+          <div class="consent">
+            <input type="checkbox" id="contactConsent" name="consent" required>
+            <label for="contactConsent">I agree that HealthOS may contact me about this message and store the details I have provided. We keep them only to respond to you, and you can ask us to delete them at any time.</label>
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Send message</button>
           <div id="formStatus" class="form-status"></div>
@@ -925,7 +949,9 @@ form.addEventListener('submit', async (e) => {
     name: fields.name.value.trim(),
     email: fields.email.value.trim(),
     subject,
-    message: fields.message.value.trim()
+    message: fields.message.value.trim(),
+    consent: fields.consent.checked,
+    website: fields.website.value
   });
 
   if (data && data.success) {
@@ -956,7 +982,9 @@ demoForm.addEventListener('submit', async (e) => {
     phone: f.phone.value.trim(),
     company: f.company.value.trim(),
     requestedDate: f.requestedDate.value,
-    message: f.message.value.trim()
+    message: f.message.value.trim(),
+    consent: f.consent.checked,
+    website: f.website.value
   });
 
   if (data && data.success) {
@@ -969,6 +997,26 @@ demoForm.addEventListener('submit', async (e) => {
   }
 });
 
+/* ---------- Funnel + section engagement ---------- */
+(function () {
+  if (!('IntersectionObserver' in window)) return;
+
+  const seen = new Set();
+  const funnel = { demo: 'demo_form_view', contact: 'contact_form_view' };
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const id = entry.target.id;
+      if (seen.has(id)) return;
+      seen.add(id);
+      // the two form sections are funnel steps; everything else is engagement
+      HealthOSAPI.trackEvent(funnel[id] || 'section_view', id);
+    });
+  }, { threshold: 0.4 });
+
+  document.querySelectorAll('section[id]').forEach((el) => io.observe(el));
+})();
 </script>
 </body>
 </html>

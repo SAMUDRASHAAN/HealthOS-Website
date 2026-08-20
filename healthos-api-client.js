@@ -34,6 +34,67 @@ const HealthOSAPI = {
   },
 
   /**
+   * A stable id for this browser, so visits can be counted as people rather
+   * than page loads. Survives navigation; cleared when the user clears storage.
+   * @private
+   */
+  visitorId: function () {
+    try {
+      var key = 'healthos_vid';
+      var id = localStorage.getItem(key);
+      if (!id) {
+        id = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : String(Date.now()) + Math.random().toString(36).slice(2);
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch (e) {
+      return null; // private mode, or storage disabled
+    }
+  },
+
+  /**
+   * First-touch attribution for this visit. Captured once and reused, so a
+   * lead is credited to where they arrived from, not the last page they saw.
+   * @private
+   */
+  source: function () {
+    try {
+      var key = 'healthos_src';
+      var saved = sessionStorage.getItem(key);
+      if (saved) return JSON.parse(saved);
+
+      var q = new URLSearchParams(window.location.search);
+      var src = {
+        referrer: document.referrer || '',
+        landingPage: window.location.pathname + window.location.search,
+        utmSource: q.get('utm_source') || '',
+        utmMedium: q.get('utm_medium') || '',
+        utmCampaign: q.get('utm_campaign') || '',
+      };
+      sessionStorage.setItem(key, JSON.stringify(src));
+      return src;
+    } catch (e) {
+      return {};
+    }
+  },
+
+  /**
+   * Record a funnel step or section view. Fire-and-forget.
+   * @param {string} event
+   * @param {string} [detail]
+   */
+  trackEvent: function (event, detail) {
+    if (!this.initialized) return;
+    return this.request('POST', '/api/track-event', {
+      event: event,
+      detail: detail || '',
+      visitorId: this.visitorId(),
+    });
+  },
+
+  /**
    * Make API requests
    * @private
    */
@@ -83,6 +144,7 @@ const HealthOSAPI = {
       referrer: document.referrer || '',
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
+      visitorId: this.visitorId(),
     };
 
     const result = await this.request('POST', '/api/track-visitor', visitorData);
@@ -113,7 +175,17 @@ const HealthOSAPI = {
       };
     }
 
-    return await this.request('POST', '/api/demo-request', data);
+    if (data.consent !== true) {
+      return {
+        success: false,
+        message: 'Please agree to be contacted before submitting.',
+      };
+    }
+
+    const payload = Object.assign({}, this.source(), data);
+    const result = await this.request('POST', '/api/demo-request', payload);
+    if (result && result.success) this.trackEvent('demo_submit');
+    return result;
   },
 
   /**
@@ -138,7 +210,17 @@ const HealthOSAPI = {
       };
     }
 
-    return await this.request('POST', '/api/contact', data);
+    if (data.consent !== true) {
+      return {
+        success: false,
+        message: 'Please agree to be contacted before submitting.',
+      };
+    }
+
+    const payload = Object.assign({}, this.source(), data);
+    const result = await this.request('POST', '/api/contact', payload);
+    if (result && result.success) this.trackEvent('contact_submit');
+    return result;
   },
 
   /**
