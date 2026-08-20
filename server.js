@@ -495,6 +495,94 @@ app.get('/api/analytics/visitors', requireAdmin, async (req, res) => {
 });
 
 // ============================================
+// 3b. FUNNEL, SOURCES AND ENGAGEMENT
+// ============================================
+app.get('/api/admin/insights', requireAdmin, async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    const [visits, events, leads, queries] = await Promise.all([
+      supabaseAdmin.from('visitors').select('visitor_id, referrer, page').gte('timestamp', cutoff),
+      supabaseAdmin.from('page_events').select('visitor_id, event, detail').gte('created_at', cutoff),
+      supabaseAdmin.from('demo_requests').select('utm_source, referrer').gte('created_at', cutoff),
+      supabaseAdmin.from('contacts').select('utm_source, referrer').gte('created_at', cutoff),
+    ]);
+
+    const failed = [visits, events, leads, queries].find((r) => r.error);
+    if (failed) throw failed.error;
+
+    const visitRows = visits.data || [];
+    const eventRows = events.data || [];
+
+    // Rows predating visitor_id have none; count those as one visitor each
+    // rather than silently collapsing them into a single phantom person.
+    let anonymousVisits = 0;
+    const uniqueIds = new Set();
+    visitRows.forEach((v) => {
+      if (v.visitor_id) uniqueIds.add(v.visitor_id);
+      else anonymousVisits += 1;
+    });
+    const uniqueVisitors = uniqueIds.size + anonymousVisits;
+
+    const peopleWith = (name) => {
+      const set = new Set();
+      let untracked = 0;
+      eventRows.forEach((e) => {
+        if (e.event !== name) return;
+        if (e.visitor_id) set.add(e.visitor_id);
+        else untracked += 1;
+      });
+      return set.size + untracked;
+    };
+
+    const tally = (rows, pick) => {
+      const counts = {};
+      rows.forEach((r) => {
+        let key = pick(r);
+        if (!key) key = 'direct';
+        try {
+          if (/^https?:\/\//i.test(key)) key = new URL(key).hostname.replace(/^www\./, '');
+        } catch (e) { /* keep the raw value */ }
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      return Object.entries(counts)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+    };
+
+    const sections = {};
+    eventRows.forEach((e) => {
+      if (e.event !== 'section_view' || !e.detail) return;
+      sections[e.detail] = (sections[e.detail] || 0) + 1;
+    });
+
+    res.json({
+      success: true,
+      days,
+      uniqueVisitors,
+      totalVisits: visitRows.length,
+      funnel: {
+        visited: uniqueVisitors,
+        sawDemoForm: peopleWith('demo_form_view'),
+        submittedDemo: peopleWith('demo_submit'),
+        sawContactForm: peopleWith('contact_form_view'),
+        submittedContact: peopleWith('contact_submit'),
+      },
+      trafficSources: tally(visitRows, (v) => v.referrer),
+      leadSources: tally([...(leads.data || []), ...(queries.data || [])], (r) => r.utm_source || r.referrer),
+      sections: Object.entries(sections)
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count),
+    });
+  } catch (error) {
+    console.error('Error building insights:', error);
+    res.status(500).json({ success: false, message: 'Failed to build insights', error: error.message });
+  }
+});
+
+// ============================================
 // 4. GET ALL DEMO REQUESTS (for admin)
 // ============================================
 app.get('/api/demo-requests', requireAdmin, async (req, res) => {
@@ -665,6 +753,131 @@ app.get('/api/admin/contacts', requireAdmin, async (req, res) => {
   }
 });
 
+// Fire-and-forget: an audit write must never block the action it records.
+function audit(action, targetType, targetId, detail) {
+  supabaseAdmin.from('admin_audit').insert([{
+    action,
+    target_type: targetType || null,
+    target_id: targetId || null,
+    detail: detail ? String(detail).slice(0, 500) : null,
+  }]).then(function (r) {
+    if (r.error) console.error('Audit write failed:', r.error.message);
+  });
+}
+
+// ---------- notes on a lead ----------
+const NOTE_TYPES = ['demo_request', 'contact'];
+
+app.get('/api/admin/notes/:type/:id', requireAdmin, async (req, res) => {
+  try {
+    if (!NOTE_TYPES.includes(req.params.type)) {
+      return res.status(400).json({ success: false, message: 'Unknown lead type' });
+    }
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid id' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('lead_notes')
+      .select('*')
+      .eq('lead_type', req.params.type)
+      .eq('lead_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ success: true, notes: data || [] });
+  } catch (error) {
+    console.error('Error fetching notes:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch notes', error: error.message });
+  }
+});
+
+app.post('/api/admin/notes/:type/:id', requireAdmin, async (req, res) => {
+  try {
+    if (!NOTE_TYPES.includes(req.params.type)) {
+      return res.status(400).json({ success: false, message: 'Unknown lead type' });
+    }
+    const id = Number(req.params.id);
+    const body = typeof req.body.body === 'string' ? req.body.body.trim() : '';
+
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid id' });
+    }
+    if (!body) {
+      return res.status(400).json({ success: false, message: 'Note cannot be empty' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('lead_notes')
+      .insert([{ lead_type: req.params.type, lead_id: id, body: body.slice(0, 4000) }])
+      .select();
+
+    if (error) throw error;
+    audit('note_added', req.params.type, id, body.slice(0, 120));
+    res.json({ success: true, note: data[0] });
+  } catch (error) {
+    console.error('Error adding note:', error);
+    res.status(500).json({ success: false, message: 'Failed to add note', error: error.message });
+  }
+});
+
+// ---------- audit trail ----------
+app.get('/api/admin/audit', requireAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('admin_audit')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+    res.json({ success: true, entries: data || [] });
+  } catch (error) {
+    console.error('Error fetching audit:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch audit', error: error.message });
+  }
+});
+
+// ---------- CSV export ----------
+function toCsv(rows, columns) {
+  const esc = (v) => {
+    const str = v === null || v === undefined ? '' : String(v);
+    // Guard against spreadsheet formula injection from a hostile submission.
+    const safe = /^[=+\-@\t\r]/.test(str) ? "'" + str : str;
+    return '"' + safe.replace(/"/g, '""') + '"';
+  };
+  return [columns.join(','), ...rows.map((r) => columns.map((c) => esc(r[c])).join(','))].join('\r\n');
+}
+
+app.get('/api/admin/export/:type', requireAdmin, async (req, res) => {
+  try {
+    const map = {
+      demo_requests: ['id', 'name', 'email', 'phone', 'company', 'message', 'requested_date', 'status', 'consent_given', 'consent_version', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at'],
+      contacts: ['id', 'name', 'email', 'subject', 'message', 'status', 'consent_given', 'consent_version', 'referrer', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at'],
+    };
+    const columns = map[req.params.type];
+    if (!columns) {
+      return res.status(400).json({ success: false, message: 'Unknown export type' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from(req.params.type)
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    audit('export', req.params.type, null, `${(data || []).length} rows`);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="healthos-${req.params.type}.csv"`);
+    res.send(toCsv(data || [], columns));
+  } catch (error) {
+    console.error('Error exporting:', error);
+    res.status(500).json({ success: false, message: 'Failed to export', error: error.message });
+  }
+});
+
 function statusUpdater(table, allowed, label) {
   return async (req, res) => {
     try {
@@ -692,6 +905,7 @@ function statusUpdater(table, allowed, label) {
         return res.status(404).json({ success: false, message: `No such ${label}` });
       }
 
+      audit('status_change', table, id, `-> ${status}`);
       res.json({ success: true, record: data[0] });
     } catch (error) {
       console.error(`Error updating ${label} status:`, error);

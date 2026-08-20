@@ -128,6 +128,42 @@
     border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;
   }
 
+  /* toolbar above each table */
+  .tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+  .tools input[type=search]{
+    flex:1;min-width:180px;padding:8px 12px;border:1px solid var(--line);
+    border-radius:7px;font-family:var(--sans);font-size:14px;
+    background:var(--surface);color:var(--ink);
+  }
+  .tools .hint{font-family:var(--mono);font-size:11px;color:var(--faint);}
+
+  /* notes */
+  tr.notes-row td{background:var(--surface-2);padding:0;}
+  .notes-box{padding:14px 16px;}
+  .notes-box .note{border-left:2px solid var(--line-2);padding:6px 0 6px 12px;margin-bottom:8px;}
+  .notes-box .note p{margin:0;font-size:13.5px;white-space:pre-wrap;}
+  .notes-box .note time{font-family:var(--mono);font-size:11px;color:var(--faint);}
+  .notes-box textarea{
+    width:100%;min-height:60px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:7px;font-family:var(--sans);font-size:13.5px;resize:vertical;
+    background:var(--surface);color:var(--ink);
+  }
+  .notes-actions{display:flex;gap:8px;align-items:center;margin-top:8px;}
+  .link{background:none;border:none;padding:0;font-size:12.5px;color:var(--pulse);
+        cursor:pointer;font-family:var(--sans);text-decoration:underline;}
+  .wa{font-size:12.5px;color:var(--pulse);text-decoration:none;white-space:nowrap;}
+  .wa:hover{text-decoration:underline;}
+
+  /* funnel */
+  .funnel{padding:14px 16px;}
+  .fstep{margin-bottom:11px;}
+  .fstep .fl{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;}
+  .fstep .fl b{font-variant-numeric:tabular-nums;}
+  .fbar{height:9px;background:var(--surface-2);border-radius:4px;overflow:hidden;}
+  .fbar i{display:block;height:100%;background:var(--pulse);border-radius:4px;}
+  .fstep .drop{font-family:var(--mono);font-size:10.5px;color:var(--faint);}
+
+  .cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;}
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px;}
   @media(max-width:860px){.cols{grid-template-columns:1fr;}}
   .panel{border:1px solid var(--line);background:var(--surface);}
@@ -184,12 +220,47 @@
 
     <section>
       <div class="sec-head"><h2>Demo requests</h2><span class="count" id="cLeads"></span></div>
+      <div class="tools">
+        <input type="search" id="leadSearch" placeholder="Search name, email, hospital, phone…" aria-label="Search demo requests">
+        <select id="leadStatus" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="contacted">Contacted</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="closed">Closed</option>
+        </select>
+        <button class="btn ghost sm" id="exportLeads">Export CSV</button>
+      </div>
       <div id="leadsWrap"></div>
     </section>
 
     <section>
       <div class="sec-head"><h2>Contact queries</h2><span class="count" id="cQueries"></span></div>
+      <div class="tools">
+        <input type="search" id="querySearch" placeholder="Search name, email, subject, message…" aria-label="Search queries">
+        <select id="queryStatus" aria-label="Filter by status">
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="handled">Handled</option>
+        </select>
+        <button class="btn ghost sm" id="exportQueries">Export CSV</button>
+      </div>
       <div id="queriesWrap"></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Funnel &amp; sources</h2><span class="count" id="cInsights"></span></div>
+      <div class="cols3">
+        <div class="panel"><h3>Conversion funnel</h3><div id="funnel"></div></div>
+        <div class="panel"><h3>Traffic sources</h3><div id="trafficSources"></div></div>
+        <div class="panel"><h3>Lead sources</h3><div id="leadSources"></div></div>
+        <div class="panel"><h3>Section engagement</h3><div id="sections"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Admin activity</h2><span class="count" id="cAudit"></span></div>
+      <div class="panel"><h3>Recent actions</h3><div id="audit"></div></div>
     </section>
 
     <section>
@@ -209,6 +280,7 @@
   'use strict';
 
   var KEY_NAME = 'healthos_admin_key';
+  var state = { leads: [], queries: [], openNotes: null };
   var REFRESH_MS = 15000;
   var timer = null;
 
@@ -310,15 +382,108 @@
     });
   }
 
+  function matches(item, term, fields) {
+    if (!term) return true;
+    var q = term.toLowerCase();
+    return fields.some(function (f) {
+      return String(item[f] || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  // A wa.me link with the number reduced to digits, which is the only form
+  // WhatsApp accepts. Indian numbers without a country code get 91 prefixed.
+  function whatsappHref(phone, name) {
+    var digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return null;
+    if (digits.length === 10) digits = '91' + digits;
+    var msg = 'Hello ' + (name || '') + ', this is HealthOS following up on your demo request.';
+    return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(msg);
+  }
+
+  function notesRow(type, id, colspan) {
+    var tr = el('tr', 'notes-row');
+    var td = el('td');
+    td.colSpan = colspan;
+    var box = el('div', 'notes-box');
+    var list = el('div', null, 'Loading notes…');
+    box.appendChild(list);
+
+    var ta = document.createElement('textarea');
+    ta.placeholder = 'What happened? e.g. called 21 Aug, wants a demo after Diwali, 420 beds.';
+    box.appendChild(ta);
+
+    var actions = el('div', 'notes-actions');
+    var save = el('button', 'btn sm', 'Add note');
+    var msg = el('span', 'hint');
+    actions.appendChild(save);
+    actions.appendChild(msg);
+    box.appendChild(actions);
+    td.appendChild(box);
+    tr.appendChild(td);
+
+    function draw(notes) {
+      list.textContent = '';
+      if (!notes.length) {
+        list.appendChild(el('div', 'hint', 'No notes yet.'));
+        return;
+      }
+      notes.forEach(function (n) {
+        var w = el('div', 'note');
+        w.appendChild(el('p', null, n.body));
+        w.appendChild(el('time', null, when(n.created_at)));
+        list.appendChild(w);
+      });
+    }
+
+    api('/api/admin/notes/' + type + '/' + id)
+      .then(function (r) { return r.ok ? r.json() : { notes: [] }; })
+      .then(function (d) { draw(d.notes || []); })
+      .catch(function () { list.textContent = 'Could not load notes.'; });
+
+    save.addEventListener('click', function () {
+      var body = ta.value.trim();
+      if (!body) { msg.textContent = 'Write something first.'; return; }
+      save.disabled = true;
+      msg.textContent = 'Saving…';
+      api('/api/admin/notes/' + type + '/' + id, { method: 'POST', body: { body: body } })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
+        .then(function () {
+          ta.value = '';
+          msg.textContent = 'Saved.';
+          save.disabled = false;
+          return api('/api/admin/notes/' + type + '/' + id)
+            .then(function (r) { return r.json(); })
+            .then(function (d) { draw(d.notes || []); });
+        })
+        .catch(function () { msg.textContent = 'Could not save.'; save.disabled = false; });
+    });
+
+    return tr;
+  }
+
   function loadLeads() {
     return api('/api/demo-requests').then(function (r) {
       if (!r.ok) throw r;
       return r.json();
     }).then(function (d) {
-      var list = d.demoRequests || [];
-      $('cLeads').textContent = list.length + (list.length === 1 ? ' request' : ' requests');
+      state.leads = d.demoRequests || [];
+      renderLeads();
+    });
+  }
 
-      var rows = list.map(function (item) {
+  function renderLeads() {
+      var term = $('leadSearch').value.trim();
+      var status = $('leadStatus').value;
+      var list = state.leads.filter(function (i) {
+        return (!status || i.status === status) &&
+               matches(i, term, ['name', 'email', 'company', 'phone', 'message']);
+      });
+      $('cLeads').textContent = list.length === state.leads.length
+        ? list.length + (list.length === 1 ? ' request' : ' requests')
+        : list.length + ' of ' + state.leads.length + ' shown';
+
+      var rows = [];
+      list.forEach(function (item) {
         var tr = el('tr');
 
         var who = el('td', 'who');
@@ -341,14 +506,33 @@
           }));
         tr.appendChild(st);
 
-        return tr;
+        var act = el('td');
+        var wa = whatsappHref(item.phone, item.name);
+        if (wa) {
+          var a = el('a', 'wa', 'WhatsApp');
+          a.href = wa;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          act.appendChild(a);
+          act.appendChild(document.createTextNode(' · '));
+        }
+        var key = 'demo_request:' + item.id;
+        var toggle = el('button', 'link', state.openNotes === key ? 'Hide notes' : 'Notes');
+        toggle.addEventListener('click', function () {
+          state.openNotes = state.openNotes === key ? null : key;
+          renderLeads();
+        });
+        act.appendChild(toggle);
+        tr.appendChild(act);
+
+        rows.push(tr);
+        if (state.openNotes === key) rows.push(notesRow('demo_request', item.id, 9));
       });
 
       var wrap = $('leadsWrap');
       wrap.textContent = '';
       wrap.appendChild(table(
-        ['Contact', 'Phone', 'Hospital', 'Preferred date', 'Message', 'Received', 'Status'], rows));
-    });
+        ['Contact', 'Phone', 'Hospital', 'Preferred date', 'Message', 'Received', 'Status', 'Actions'], rows));
   }
 
   function loadQueries() {
@@ -356,10 +540,24 @@
       if (!r.ok) throw r;
       return r.json();
     }).then(function (d) {
-      var list = d.contacts || [];
-      $('cQueries').textContent = list.length + (list.length === 1 ? ' message' : ' messages');
+      state.queries = d.contacts || [];
+      renderQueries();
+    });
+  }
 
-      var rows = list.map(function (item) {
+  function renderQueries() {
+      var term = $('querySearch').value.trim();
+      var status = $('queryStatus').value;
+      var list = state.queries.filter(function (i) {
+        return (!status || (i.status || 'open') === status) &&
+               matches(i, term, ['name', 'email', 'subject', 'message']);
+      });
+      $('cQueries').textContent = list.length === state.queries.length
+        ? list.length + (list.length === 1 ? ' message' : ' messages')
+        : list.length + ' of ' + state.queries.length + ' shown';
+
+      var rows = [];
+      list.forEach(function (item) {
         var tr = el('tr');
 
         var who = el('td', 'who');
@@ -380,13 +578,23 @@
           }));
         tr.appendChild(st);
 
-        return tr;
+        var act = el('td');
+        var key = 'contact:' + item.id;
+        var toggle = el('button', 'link', state.openNotes === key ? 'Hide notes' : 'Notes');
+        toggle.addEventListener('click', function () {
+          state.openNotes = state.openNotes === key ? null : key;
+          renderQueries();
+        });
+        act.appendChild(toggle);
+        tr.appendChild(act);
+
+        rows.push(tr);
+        if (state.openNotes === key) rows.push(notesRow('contact', item.id, 6));
       });
 
       var wrap = $('queriesWrap');
       wrap.textContent = '';
-      wrap.appendChild(table(['From', 'Subject', 'Message', 'Received', 'Status'], rows));
-    });
+      wrap.appendChild(table(['From', 'Subject', 'Message', 'Received', 'Status', 'Actions'], rows));
   }
 
   function loadVisitors() {
@@ -426,8 +634,124 @@
     });
   }
 
+  function bars(target, items, emptyText) {
+    var node = $(target);
+    node.textContent = '';
+    if (!items || !items.length) {
+      node.appendChild(el('div', 'empty', emptyText));
+      return;
+    }
+    items.forEach(function (i) {
+      var row = el('div', 'rowline');
+      row.appendChild(el('div', 'p', i.label));
+      row.appendChild(el('div', 'n', i.count));
+      node.appendChild(row);
+    });
+  }
+
+  function loadInsights() {
+    return api('/api/admin/insights?days=30').then(function (r) {
+      if (!r.ok) throw r;
+      return r.json();
+    }).then(function (d) {
+      $('cInsights').textContent = d.uniqueVisitors + ' unique visitors · last ' + d.days + ' days';
+
+      var f = d.funnel;
+      var steps = [
+        { label: 'Visited the site', value: f.visited },
+        { label: 'Reached the demo form', value: f.sawDemoForm },
+        { label: 'Submitted a demo request', value: f.submittedDemo },
+        { label: 'Reached the contact form', value: f.sawContactForm },
+        { label: 'Sent a message', value: f.submittedContact }
+      ];
+      var top = f.visited || 1;
+
+      var box = $('funnel');
+      box.textContent = '';
+      var wrap = el('div', 'funnel');
+      steps.forEach(function (st, idx) {
+        var s1 = el('div', 'fstep');
+        var lab = el('div', 'fl');
+        lab.appendChild(el('span', null, st.label));
+        var b = el('b', null, st.value);
+        lab.appendChild(b);
+        s1.appendChild(lab);
+
+        var bar = el('div', 'fbar');
+        var fill = document.createElement('i');
+        fill.style.width = Math.min(100, Math.round((st.value / top) * 100)) + '%';
+        bar.appendChild(fill);
+        s1.appendChild(bar);
+
+        // conversion against the step above, where that comparison is meaningful
+        if (idx === 1 || idx === 3) {
+          s1.appendChild(el('div', 'drop', Math.round((st.value / top) * 100) + '% of visitors'));
+        } else if (idx === 2 || idx === 4) {
+          var prev = steps[idx - 1].value;
+          s1.appendChild(el('div', 'drop', prev ? Math.round((st.value / prev) * 100) + '% of those who saw the form' : '—'));
+        }
+        wrap.appendChild(s1);
+      });
+      box.appendChild(wrap);
+
+      bars('trafficSources', d.trafficSources, 'No referrers recorded yet.');
+      bars('leadSources', d.leadSources, 'No leads with a source yet.');
+      bars('sections', d.sections, 'No section views yet.');
+    });
+  }
+
+  function loadAudit() {
+    return api('/api/admin/audit').then(function (r) {
+      if (!r.ok) throw r;
+      return r.json();
+    }).then(function (d) {
+      var list = d.entries || [];
+      $('cAudit').textContent = list.length ? list.length + ' recent' : '';
+      var node = $('audit');
+      node.textContent = '';
+      if (!list.length) {
+        node.appendChild(el('div', 'empty', 'No admin actions recorded yet.'));
+        return;
+      }
+      list.slice(0, 25).forEach(function (e) {
+        var row = el('div', 'rowline');
+        var left = [e.action, e.target_type, e.target_id].filter(Boolean).join(' · ');
+        row.appendChild(el('div', 'p', left + (e.detail ? ' — ' + e.detail : '')));
+        row.appendChild(el('div', 'n', when(e.created_at)));
+        node.appendChild(row);
+      });
+    });
+  }
+
+  // The viewer's key never leaves the page as a URL parameter, so an export is
+  // fetched with the auth header and handed over as a blob.
+  function exportCsv(type, button) {
+    var original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Exporting…';
+    api('/api/admin/export/' + type)
+      .then(function (r) { return r.ok ? r.blob() : Promise.reject(r); })
+      .then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'healthos-' + type + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        button.textContent = original;
+        button.disabled = false;
+        loadAudit();
+      })
+      .catch(function () {
+        button.textContent = 'Export failed';
+        setTimeout(function () { button.textContent = original; button.disabled = false; }, 2000);
+      });
+  }
+
   function refreshAll() {
-    return Promise.all([loadSummary(), loadLeads(), loadQueries(), loadVisitors()])
+    return Promise.all([loadSummary(), loadLeads(), loadQueries(), loadVisitors(), loadInsights(), loadAudit()])
       .then(function () {
         $('updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
       })
@@ -485,6 +809,13 @@
   $('key').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') $('gateBtn').click();
   });
+
+  $('leadSearch').addEventListener('input', renderLeads);
+  $('leadStatus').addEventListener('change', renderLeads);
+  $('querySearch').addEventListener('input', renderQueries);
+  $('queryStatus').addEventListener('change', renderQueries);
+  $('exportLeads').addEventListener('click', function () { exportCsv('demo_requests', this); });
+  $('exportQueries').addEventListener('click', function () { exportCsv('contacts', this); });
 
   $('refresh').addEventListener('click', refreshAll);
   $('signout').addEventListener('click', function () { signOut(''); });
