@@ -295,18 +295,6 @@
     text-transform:uppercase; letter-spacing:.06em; margin-top:12px; display:block;
   }
 
-  /* ---------- SECURITY ---------- */
-  .security-list{ display:flex; flex-direction:column; }
-  .sec-layer{
-    display:grid; grid-template-columns:80px 1fr; gap:24px;
-    padding:28px 0; border-top:1px solid var(--line-dark);
-    align-items:start;
-  }
-  .sec-layer:last-child{ border-bottom:1px solid var(--line-dark); }
-  .sec-layer .lyr-num{ font-family:var(--mono); font-size:13px; color:var(--pulse); padding-top:2px; }
-  .sec-layer h4{ font-family:var(--sans); font-size:16.5px; font-weight:600; margin-bottom:6px; color:var(--porcelain); }
-  .sec-layer p{ font-size:14px; color:#8FA0BE; line-height:1.6; max-width:640px; }
-
   /* ---------- FINANCE ---------- */
   .finance-split{
     display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:center;
@@ -365,6 +353,31 @@
   .cap-later li{ font-size:14px; color:var(--mist); padding-left:18px; position:relative; }
   .cap-later li::before{ content:''; position:absolute; left:0; top:8px; width:6px; height:6px;
                          border-radius:50%; border:1.5px solid var(--mist); }
+
+  /* ---------- pricing ---------- */
+  .plan-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+              background:var(--line); border:1px solid var(--line); }
+  @media(max-width:860px){ .plan-grid{ grid-template-columns:1fr; } }
+  .plan{ background:var(--porcelain); padding:34px 28px; display:flex; flex-direction:column; }
+  .plan.featured{ background:var(--ink); color:var(--porcelain); }
+  .plan .tier{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--mist); margin-bottom:18px; }
+  .plan.featured .tier{ color:var(--pulse); }
+  .plan .amt{ font-family:var(--serif); font-size:clamp(30px,3.6vw,40px); line-height:1;
+              letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+  .plan .per{ font-family:var(--mono); font-size:12px; color:var(--mist); margin-top:9px; }
+  .plan .save{ font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+               text-transform:uppercase; color:var(--pulse); margin-top:12px; }
+  .plan .who{ font-size:14px; line-height:1.55; color:var(--mist);
+              margin:20px 0 0; padding-top:18px; border-top:1px solid var(--line); }
+  .plan.featured .who{ border-top-color:var(--line-dark); }
+  .plan .cta{ margin-top:auto; padding-top:24px; }
+  .plan .cta a{ display:inline-flex; align-items:center; justify-content:center;
+                width:100%; padding:12px 18px; border-radius:8px; font-size:14px;
+                font-weight:500; text-decoration:none;
+                border:1px solid var(--ink); color:var(--ink); }
+  .plan.featured .cta a{ background:var(--pulse); border-color:var(--pulse); color:var(--ink); }
+  .plan-note{ font-size:13.5px; color:var(--mist); margin-top:26px; line-height:1.6; max-width:64ch; }
 
   /* ---------- comparison ---------- */
   .vs-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
@@ -432,8 +445,8 @@
     <div class="nav-links" id="navLinks">
       <a href="#platform">Platform</a>
       <a href="#journey">How it works</a>
-      <a href="#security">Security</a>
       <a href="#finance">Finance</a>
+      <a href="#pricing">Pricing</a>
       <a href="#contact">Contact</a>
       <a href="#demo" class="btn btn-primary mobile-cta">Request a demo</a>
     </div>
@@ -464,7 +477,7 @@
       </div>
       <div class="hero-proof reveal">
         <div class="proof-item"><div class="num mono">9</div><div class="lbl">integrated modules</div></div>
-        <div class="proof-item"><div class="num mono">5</div><div class="lbl">security layers, defence-in-depth</div></div>
+        <div class="proof-item"><div class="num mono">ABDM</div><div class="lbl">native, not retrofitted</div></div>
         <div class="proof-item"><div class="num mono">ap-south-1</div><div class="lbl">data never leaves India</div></div>
       </div>
     </div>
@@ -728,7 +741,7 @@
     </div>
   </section>
 
-  <!-- SECURITY -->
+  <!-- ABDM -->
   <section class="on-dark section-pad" id="abdm">
     <div class="wrap">
       <div class="reveal">
@@ -754,39 +767,6 @@
     </div>
   </section>
 
-  <section class="on-dark section-pad" id="security">
-    <div class="wrap">
-      <div class="section-head reveal">
-        <div class="eyebrow">Security</div>
-        <h2>Five independent layers. Every one must fail for a breach to succeed.</h2>
-        <p>If the database were stolen tomorrow, the attacker gets encrypted blobs. Nothing readable. Nothing usable.</p>
-      </div>
-      <div class="security-list reveal">
-        <div class="sec-layer">
-          <div class="lyr-num">01</div>
-          <div><h4>Perimeter</h4><p>AWS WAF, DDoS protection, and TLS 1.3 stop malicious traffic before it reaches the application.</p></div>
-        </div>
-        <div class="sec-layer">
-          <div class="lyr-num">02</div>
-          <div><h4>Identity</h4><p>Role-based access, multi-factor authentication, and immutable audit logs on every action.</p></div>
-        </div>
-        <div class="sec-layer">
-          <div class="lyr-num">03</div>
-          <div><h4>Network</h4><p>Patient data services run in private VPC subnets — never exposed to the public internet.</p></div>
-        </div>
-        <div class="sec-layer">
-          <div class="lyr-num">04</div>
-          <div><h4>Consent</h4><p>An ABDM-compatible consent engine gates every share, under the DPDP Act 2023.</p></div>
-        </div>
-        <div class="sec-layer">
-          <div class="lyr-num">05</div>
-          <div><h4>Storage</h4><p>AES-256 encryption at rest, keys rotated via AWS KMS. Data stored exclusively in Mumbai.</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FINANCE -->
   <section class="section-pad" id="finance">
     <div class="wrap">
       <div class="finance-split">
@@ -811,6 +791,45 @@
   </svg>
 
   <!-- CONTACT -->
+  <section class="section-pad" id="pricing" style="background:var(--porcelain-2)">
+    <div class="wrap">
+      <div class="reveal">
+        <div class="eyebrow">Pricing</div>
+        <h2 style="font-size:clamp(26px,3.4vw,38px); margin-top:18px; max-width:20ch;">One price. The whole platform.</h2>
+        <p style="color:var(--mist); margin:18px 0 44px; line-height:1.65; font-size:15.5px; max-width:62ch;">No per-seat counting and no module-by-module upsell. Pricing is per hospital.</p>
+      </div>
+
+      <div class="plan-grid reveal">
+        <div class="plan">
+          <div class="tier">Monthly</div>
+          <div class="amt">&#8377;15,000</div>
+          <div class="per">per month, per hospital</div>
+          <div class="who">Month to month, with no lock-in. The simplest way to start alongside your existing system.</div>
+          <div class="cta"><a href="#demo">Request a demo</a></div>
+        </div>
+
+        <div class="plan featured">
+          <div class="tier">Yearly</div>
+          <div class="amt">&#8377;1,50,000</div>
+          <div class="per">per year, per hospital</div>
+          <div class="save">Saves &#8377;30,000 a year</div>
+          <div class="who">The same platform billed annually &mdash; two months lighter than paying monthly.</div>
+          <div class="cta"><a href="#demo">Request a demo</a></div>
+        </div>
+
+        <div class="plan">
+          <div class="tier">Government</div>
+          <div class="amt">&#8377;10,000</div>
+          <div class="per">per month, per facility</div>
+          <div class="who">For public hospitals and state health facilities, including statutory reporting needs.</div>
+          <div class="cta"><a href="#demo">Talk to us</a></div>
+        </div>
+      </div>
+
+      <p class="plan-note reveal">Figures are exclusive of taxes. Onboarding, data migration and any on-site training are scoped and agreed before you commit.</p>
+    </div>
+  </section>
+
   <section class="section-pad" id="demo" style="background:var(--porcelain-2)">
     <div class="wrap">
       <div class="contact-shell">
@@ -920,8 +939,8 @@
     <div class="footer-links">
       <a href="/privacy.html">Privacy</a>
       <a href="#platform">Platform</a>
-      <a href="#security">Security</a>
       <a href="#finance">Finance</a>
+      <a href="#pricing">Pricing</a>
       <a href="#contact">Contact</a>
     </div>
   </div>
