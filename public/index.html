@@ -342,6 +342,56 @@
     background:var(--porcelain); color:var(--ink);
   }
   .field textarea{ resize:vertical; min-height:90px; }
+  /* ---------- capabilities ---------- */
+  .cap-groups{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+               background:var(--line); border:1px solid var(--line); }
+  @media(max-width:900px){ .cap-groups{ grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:620px){ .cap-groups{ grid-template-columns:1fr; } }
+  .cap-group{ background:var(--porcelain); padding:30px 26px; }
+  .cap-group h3{ font-size:16px; margin:0 0 4px; letter-spacing:-.01em; }
+  .cap-group .cap-sub{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+                       text-transform:uppercase; color:var(--pulse); margin:0 0 16px; }
+  .cap-group ul{ margin:0; padding:0; list-style:none; }
+  .cap-group li{ font-size:14px; line-height:1.5; color:var(--mist);
+                 padding:8px 0 8px 18px; position:relative; border-bottom:1px solid var(--line); }
+  .cap-group li:last-child{ border-bottom:none; }
+  .cap-group li::before{ content:''; position:absolute; left:0; top:15px;
+                         width:6px; height:6px; border-radius:50%; background:var(--pulse); }
+  .cap-later{ margin-top:40px; border:1px solid var(--line); padding:26px 28px; }
+  .cap-later .cap-sub{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+                       text-transform:uppercase; color:var(--mist); margin:0 0 14px; }
+  .cap-later ul{ margin:0; padding:0; list-style:none; display:grid;
+                 grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px 26px; }
+  .cap-later li{ font-size:14px; color:var(--mist); padding-left:18px; position:relative; }
+  .cap-later li::before{ content:''; position:absolute; left:0; top:8px; width:6px; height:6px;
+                         border-radius:50%; border:1.5px solid var(--mist); }
+
+  /* ---------- comparison ---------- */
+  .vs-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1px;
+            background:var(--line); border:1px solid var(--line); }
+  @media(max-width:760px){ .vs-grid{ grid-template-columns:1fr; } }
+  .vs-col{ background:var(--porcelain); padding:30px 28px; }
+  .vs-col.vs-them{ background:var(--porcelain-2); }
+  .vs-col h3{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+              text-transform:uppercase; font-weight:400; margin:0 0 18px; }
+  .vs-them h3{ color:var(--mist); }
+  .vs-us h3{ color:var(--pulse); }
+  .vs-col ul{ margin:0; padding:0; list-style:none; }
+  .vs-col li{ font-size:14.5px; line-height:1.55; padding:11px 0;
+              border-bottom:1px solid var(--line); color:var(--mist); }
+  .vs-col li:last-child{ border-bottom:none; }
+  .vs-us li{ color:var(--ink); }
+
+  /* ---------- ABDM band ---------- */
+  .abdm-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+              background:var(--line-dark); border:1px solid var(--line-dark); }
+  @media(max-width:700px){ .abdm-grid{ grid-template-columns:1fr; } }
+  .abdm-cell{ background:var(--ink); padding:32px 26px; }
+  .abdm-cell .v{ font-family:var(--serif); font-size:clamp(32px,4.4vw,46px);
+                 line-height:1; font-variant-numeric:tabular-nums; }
+  .abdm-cell .l{ font-size:14px; color:var(--mist); margin-top:11px; line-height:1.5; }
+  .abdm-note{ font-family:var(--mono); font-size:11.5px; color:var(--mist); margin-top:22px; }
+
   .consent{ display:flex; gap:10px; align-items:flex-start; margin:4px 0 18px; }
   .consent input{ width:16px; height:16px; margin-top:2px; flex:none; accent-color:var(--pulse); }
   .consent label{
@@ -509,6 +559,127 @@
   </section>
 
   <!-- JOURNEY -->
+  <section class="section-pad" id="capabilities">
+    <div class="wrap">
+      <div class="reveal">
+        <div class="eyebrow">What's inside</div>
+        <h2 style="font-size:clamp(26px,3.4vw,38px); margin-top:18px; max-width:20ch;">Everything a hospital day actually touches.</h2>
+        <p style="color:var(--mist); margin:18px 0 44px; line-height:1.65; font-size:15.5px; max-width:62ch;">The modules above, broken down into what your staff would use from the first week — and, separately, what is still ahead of us.</p>
+      </div>
+
+      <div class="cap-groups reveal">
+        <div class="cap-group">
+          <h3>Patient identity &amp; records</h3>
+          <p class="cap-sub">PRN Engine</p>
+          <ul>
+            <li>ABHA-linked universal patient identity</li>
+            <li>Deduplication across every facility</li>
+            <li>Complete longitudinal health timeline</li>
+            <li>HL7 FHIR interoperability</li>
+            <li>Paperless records with consent gating</li>
+          </ul>
+        </div>
+        <div class="cap-group">
+          <h3>Hospital operations</h3>
+          <p class="cap-sub">Hospital HIS</p>
+          <ul>
+            <li>OPD queue management</li>
+            <li>IPD bed and admission tracking</li>
+            <li>Billing and invoicing</li>
+            <li>In-house pharmacy</li>
+            <li>Laboratory and radiology orders</li>
+          </ul>
+        </div>
+        <div class="cap-group">
+          <h3>Clinical intelligence</h3>
+          <p class="cap-sub">AI Clinical Assistant</p>
+          <ul>
+            <li>Drug interaction alerts</li>
+            <li>Diagnosis pattern recognition</li>
+            <li>Decision support at the point of care</li>
+            <li>Plain-language report summaries</li>
+          </ul>
+        </div>
+        <div class="cap-group">
+          <h3>In the patient's hands</h3>
+          <p class="cap-sub">Patient App</p>
+          <ul>
+            <li>Their full record, on their phone</li>
+            <li>Appointment booking</li>
+            <li>Consent management per share</li>
+            <li>Guided discovery of doctor, lab and pharmacy</li>
+            <li>Live admission timeline for families</li>
+          </ul>
+        </div>
+        <div class="cap-group">
+          <h3>Pharmacy &amp; labs</h3>
+          <p class="cap-sub">Supply side</p>
+          <ul>
+            <li>Order routing across the network</li>
+            <li>Inventory and dispensing</li>
+            <li>Diagnostic results linked to the record</li>
+            <li>Home sample collection</li>
+          </ul>
+        </div>
+        <div class="cap-group">
+          <h3>Analytics &amp; surveillance</h3>
+          <p class="cap-sub">Intelligence layer</p>
+          <ul>
+            <li>Real-time hospital KPIs</li>
+            <li>Occupancy and capacity views</li>
+            <li>Population health trends</li>
+            <li>Outbreak signals from prescription patterns</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="cap-later reveal">
+        <p class="cap-sub">On the roadmap — not yet available</p>
+        <ul>
+          <li>Predictive inventory &amp; demand forecasting</li>
+          <li>Public-health dashboards for government</li>
+          <li>Statutory reporting</li>
+          <li>Telemedicine</li>
+          <li>Ambulance coordination</li>
+          <li>IoT vitals integration</li>
+          <li>Embedded health finance</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section-pad" id="difference" style="background:var(--porcelain-2)">
+    <div class="wrap">
+      <div class="reveal">
+        <div class="eyebrow">The difference</div>
+        <h2 style="font-size:clamp(26px,3.4vw,38px); margin-top:18px; max-width:22ch;">Most tools take one slice. We run the pathway.</h2>
+        <p style="color:var(--mist); margin:18px 0 44px; line-height:1.65; font-size:15.5px; max-width:62ch;">Record apps and doctor directories solve a piece of the problem and stop at the edge of it. The gap is not features — it is depth.</p>
+      </div>
+      <div class="vs-grid reveal">
+        <div class="vs-col vs-them">
+          <h3>Record apps &amp; directories</h3>
+          <ul>
+            <li>Store records or list doctors — one slice of the journey</li>
+            <li>Consumer-side data only, so no supply-side forecasting</li>
+            <li>AI that answers a question</li>
+            <li>English and Hindi, built for metros</li>
+            <li>Sits on top of whatever system you already run</li>
+          </ul>
+        </div>
+        <div class="vs-col vs-us">
+          <h3>HealthOS</h3>
+          <ul>
+            <li>One operating system across the whole care pathway</li>
+            <li>Two-sided data driving pharmacy, lab and bed intelligence</li>
+            <li>AI that books a real, in-network, in-stock next step</li>
+            <li>Assamese-first, regional, ABDM-embedded</li>
+            <li>Runs the operations — deep and closed-loop</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section-pad" id="journey" style="background:var(--porcelain-2)">
     <div class="wrap">
       <div class="section-head reveal">
@@ -558,6 +729,31 @@
   </section>
 
   <!-- SECURITY -->
+  <section class="on-dark section-pad" id="abdm">
+    <div class="wrap">
+      <div class="reveal">
+        <div class="eyebrow" style="color:var(--pulse);">Built on ABDM</div>
+        <h2 style="font-size:clamp(26px,3.4vw,38px); margin-top:18px; max-width:24ch;">Not a standard we plan to adopt. The one we were built on.</h2>
+        <p style="color:var(--mist); margin:18px 0 44px; line-height:1.65; font-size:15.5px; max-width:62ch;">India already built the rails. ABHA identity and linked records are national infrastructure — HealthOS speaks them natively, so a hospital joins an ecosystem rather than another island.</p>
+      </div>
+      <div class="abdm-grid reveal">
+        <div class="abdm-cell">
+          <div class="v">90 Cr+</div>
+          <div class="l">ABHA accounts created nationally</div>
+        </div>
+        <div class="abdm-cell">
+          <div class="v">100 Cr+</div>
+          <div class="l">Health records linked under ABDM</div>
+        </div>
+        <div class="abdm-cell">
+          <div class="v">450+</div>
+          <div class="l">Integrated digital health solutions</div>
+        </div>
+      </div>
+      <p class="abdm-note reveal">Figures published by the National Health Authority for the ABDM ecosystem.</p>
+    </div>
+  </section>
+
   <section class="on-dark section-pad" id="security">
     <div class="wrap">
       <div class="section-head reveal">
