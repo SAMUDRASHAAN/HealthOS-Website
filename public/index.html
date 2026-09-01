@@ -295,24 +295,6 @@
     text-transform:uppercase; letter-spacing:.06em; margin-top:12px; display:block;
   }
 
-  /* ---------- FINANCE ---------- */
-  .finance-split{
-    display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:center;
-  }
-  @media(max-width:860px){ .finance-split{ grid-template-columns:1fr; gap:40px; } }
-  .emi-card{
-    background:var(--porcelain); border:1px solid var(--line);
-    border-radius:16px; padding:26px 24px;
-  }
-  .emi-row{
-    display:flex; justify-content:space-between; align-items:center;
-    padding:14px 0; border-bottom:1px solid var(--line);
-  }
-  .emi-row:last-child{ border-bottom:none; }
-  .emi-row .plan{ font-size:14px; }
-  .emi-row .amt{ font-family:var(--mono); font-size:14px; color:var(--pulse); }
-  .emi-note{ font-family:var(--mono); font-size:11px; color:var(--mist); margin-top:16px; text-transform:uppercase; letter-spacing:.05em; }
-
   /* ---------- CONTACT ---------- */
   .contact-shell{
     display:grid; grid-template-columns:1fr 1fr; gap:64px;
@@ -456,7 +438,6 @@
     <div class="nav-links" id="navLinks">
       <a href="#platform">Platform</a>
       <a href="#journey">How it works</a>
-      <a href="#finance">Finance</a>
       <a href="#contact">Contact</a>
       <a href="#demo" class="btn btn-primary mobile-cta">Request a demo</a>
     </div>
@@ -777,30 +758,6 @@
     </div>
   </section>
 
-  <section class="section-pad" id="finance">
-    <div class="wrap">
-      <div class="finance-split">
-        <div class="reveal">
-          <div class="eyebrow">HealthOS Finance</div>
-          <h2 style="font-size:clamp(26px,3.4vw,38px); margin-top:18px;">No one should choose between treatment and debt.</h2>
-          <p style="color:var(--mist); margin-top:18px; line-height:1.65; font-size:15.5px;">When a bill is more than a family can pay, HealthOS shows financing options directly inside the billing screen — matched from partner banks and NBFCs in minutes. The hospital gets paid immediately. Treatment is never delayed.</p>
-        </div>
-        <div class="emi-card reveal">
-          <div class="eyebrow" style="margin-bottom:16px;">Sample estimate · ₹1,20,000</div>
-          <div class="emi-row"><span class="plan">12-month plan</span><span class="amt">₹11,200 / mo</span></div>
-          <div class="emi-row"><span class="plan">24-month plan</span><span class="amt">₹5,800 / mo</span></div>
-          <div class="emi-row"><span class="plan">Government scheme</span><span class="amt">₹3,200 / mo</span></div>
-          <div class="emi-note">Disbursed directly to hospital · No branch visit</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <svg class="pulse-divider" viewBox="0 0 1180 64" preserveAspectRatio="none" aria-hidden="true">
-    <path id="pulse3" d="M0,32 L260,32 L280,14 L300,50 L320,32 L360,32 L380,22 L400,42 L420,32 L1180,32"/>
-  </svg>
-
-  <!-- CONTACT -->
   <section class="section-pad" id="demo" style="background:var(--porcelain-2)">
     <div class="wrap">
       <div class="contact-shell">
@@ -934,7 +891,6 @@
         <h4>Company</h4>
         <ul>
           <li><a href="/about.html">About us</a></li>
-          <li><a href="#finance">HealthOS Finance</a></li>
           <li><a href="#demo">Request a demo</a></li>
           <li><a href="/contact.html">Contact</a></li>
         </ul>
